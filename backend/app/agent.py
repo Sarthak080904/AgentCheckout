@@ -1,11 +1,12 @@
 from anthropic import Anthropic
 
-from app.config import ANTHROPIC_API_KEY
+from app.config import ANTHROPIC_API_KEY, AGENT_MAX_AUTO_AMOUNT_INR
 from app.tools import TOOL_SCHEMAS, run_tool
+from app.audit import log_action
 
 MODEL = "claude-sonnet-5"
 
-SYSTEM_PROMPT = """You are the shopping assistant for an online merchant on Razorpay.
+SYSTEM_PROMPT = f"""You are the shopping assistant for an online merchant on Razorpay.
 Help the buyer find products from the catalog and complete checkout.
 
 Rules:
@@ -13,6 +14,9 @@ Rules:
 - When multiple variants match (e.g. different colors), show the buyer the options.
 - Before calling create_payment_link, explicitly restate the product, quantity, and total
   price, and get the buyer's clear confirmation in the conversation first.
+- create_payment_link will refuse orders above Rs {AGENT_MAX_AUTO_AMOUNT_INR} (a hard safety
+  cap). If that happens, tell the buyer plainly that this order needs manual/human approval
+  and cannot be auto-completed by you.
 - After creating a payment link, tell the buyer to click it to complete payment in
   Razorpay's test-mode checkout.
 - Be concise. This is a chat interface, not an essay.
@@ -30,7 +34,7 @@ def get_anthropic_client() -> Anthropic:
     return _client
 
 
-def run_agent_turn(history: list[dict]) -> dict:
+def run_agent_turn(history: list[dict], session_id: str | None = None) -> dict:
     """
     history: list of {"role": "user"|"assistant", "content": str | list} messages,
     NOT including the system prompt.
@@ -55,6 +59,10 @@ def run_agent_turn(history: list[dict]) -> dict:
             messages.append({"role": "assistant", "content": response.content})
             return {"reply": reply_text, "messages": messages, "actions": actions}
 
+        # Reasoning = any text the model wrote alongside this batch of tool calls,
+        # used as the "why" in the audit log.
+        reasoning = " ".join(b.text for b in response.content if b.type == "text").strip()
+
         messages.append({"role": "assistant", "content": response.content})
 
         tool_results = []
@@ -62,7 +70,33 @@ def run_agent_turn(history: list[dict]) -> dict:
             if block.type != "tool_use":
                 continue
             result = run_tool(block.name, block.input)
-            actions.append({"tool": block.name, "input": block.input, "result": result})
+            actions.append({"tool": block.name, "input": block.input, "result": result, "reasoning": reasoning})
+
+            if block.name == "create_payment_link":
+                within_bound = result.get("within_bound", True)
+                outcome = "created" if "payment_link" in result else ("blocked_over_limit" if not within_bound else "error")
+                log_action(
+                    session_id=session_id,
+                    tool=block.name,
+                    tool_input=block.input,
+                    result=result,
+                    amount_inr=result.get("amount_inr"),
+                    bound_limit_inr=AGENT_MAX_AUTO_AMOUNT_INR,
+                    within_bound=within_bound,
+                    outcome=outcome,
+                )
+            else:
+                log_action(
+                    session_id=session_id,
+                    tool=block.name,
+                    tool_input=block.input,
+                    result=result,
+                    amount_inr=None,
+                    bound_limit_inr=None,
+                    within_bound=True,
+                    outcome="info",
+                )
+
             tool_results.append(
                 {
                     "type": "tool_result",

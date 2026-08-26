@@ -4,6 +4,7 @@ from pydantic import BaseModel
 
 from app.catalog import load_catalog, find_product
 from app.agent import run_agent_turn
+from app.audit import list_actions
 
 app = FastAPI(title="AgentCheckout API")
 
@@ -35,15 +36,21 @@ def get_product(sku_id: str):
 
 class ChatRequest(BaseModel):
     history: list[dict]  # full prior conversation, e.g. [{"role": "user", "content": "..."}]
+    session_id: str | None = None
 
 
 @app.post("/api/chat")
 def chat(req: ChatRequest):
     try:
-        result = run_agent_turn(req.history)
+        result = run_agent_turn(req.history, session_id=req.session_id)
     except RuntimeError as e:
         raise HTTPException(status_code=500, detail=str(e))
     return {"reply": result["reply"], "messages": result["messages"], "actions": result["actions"]}
+
+
+@app.get("/api/audit-log")
+def audit_log(limit: int = 100):
+    return list_actions(limit=limit)
 
 
 # --- Day 5: agent-readable endpoints for a second AI agent (buyer-agent) ---

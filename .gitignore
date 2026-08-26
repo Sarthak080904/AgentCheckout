@@ -20,3 +20,6 @@ Thumbs.db
 
 # logs
 *.log
+
+# runtime data
+backend/data/audit.db

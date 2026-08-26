@@ -1,5 +1,6 @@
 from app.catalog import load_catalog, find_product
 from app.razorpay_client import create_payment_link
+from app.config import AGENT_MAX_AUTO_AMOUNT_INR
 
 TOOL_SCHEMAS = [
     {
@@ -64,14 +65,31 @@ def run_tool(name: str, tool_input: dict) -> dict:
         quantity = tool_input.get("quantity", 1)
         product = find_product(sku_id)
         if not product:
-            return {"error": "not_found"}
+            return {"error": "not_found", "within_bound": True, "amount_inr": None}
         if product["stock"] < quantity:
-            return {"error": "insufficient_stock", "available": product["stock"]}
+            return {"error": "insufficient_stock", "available": product["stock"], "within_bound": True, "amount_inr": None}
+
         total = product["price_inr"] * quantity
+
+        # Guardrail: agent cannot auto-create a payment above the configured cap.
+        # Above this, the tool refuses and asks for a human-confirmed override
+        # instead of silently proceeding — this is the "bounded and gated" part.
+        if total > AGENT_MAX_AUTO_AMOUNT_INR:
+            return {
+                "error": "amount_exceeds_auto_limit",
+                "amount_inr": total,
+                "limit_inr": AGENT_MAX_AUTO_AMOUNT_INR,
+                "within_bound": False,
+                "message": (
+                    f"₹{total} exceeds the ₹{AGENT_MAX_AUTO_AMOUNT_INR} auto-approval limit. "
+                    "This requires explicit human sign-off outside the agent before proceeding."
+                ),
+            }
+
         link = create_payment_link(
             amount_inr=total,
             description=f"{quantity} x {product['name']} ({sku_id})",
         )
-        return {"payment_link": link, "total_inr": total}
+        return {"payment_link": link, "total_inr": total, "within_bound": True, "amount_inr": total}
 
     return {"error": f"unknown_tool:{name}"}

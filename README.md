@@ -12,7 +12,7 @@ and on behalf of another AI agent (agent-readable catalog + API), on Razorpay te
 - [x] Backend shell (FastAPI) serving `/api/catalog`
 - [x] Frontend shell (Next.js) rendering the live catalog
 - [x] Day 2-3: Claude tool-calling agent loop + Razorpay test-mode checkout (`/api/chat`)
-- [ ] Day 4: Guardrails + audit log (`agent_actions` table)
+- [x] Day 4: Guardrails + audit log (`agent_actions` table, `/api/audit-log`)
 - [ ] Day 5: Agent-readable catalog endpoints + buyer-agent simulator script
 - [ ] Day 6: Chat UI + live agent-reasoning panel
 - [ ] Day 7: Deliberate graceful-failure case
