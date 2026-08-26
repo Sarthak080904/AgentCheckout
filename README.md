@@ -119,3 +119,12 @@ obstacles, so log them here as they happen instead of reconstructing them later.
   render and again during client hydration, producing two different UUIDs.
   Fixed by initializing `sessionId` as `""` and generating the real UUID inside
   a `useEffect` (client-only, runs after hydration).
+- **Day 6**: sending a chat message (Enter or Send click) scrolled the whole
+  page down, not just the chat panel. Two contributing bugs: (1) the
+  auto-scroll-to-latest-message logic used `scrollIntoView()` on a marker div,
+  which scrolls *every* scrollable ancestor into view including the page
+  itself — fixed by setting `scrollTop` directly on the chat's own message
+  container instead; (2) `disabled={loading}` was applied to the input/button
+  while they held focus — disabling a focused element forces a browser blur,
+  which was also moving the scroll position. Fixed by removing `disabled` and
+  guarding double-submits with a ref instead.

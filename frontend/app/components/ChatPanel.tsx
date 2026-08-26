@@ -21,15 +21,21 @@ export default function ChatPanel({ onActivity }: { onActivity?: () => void }) {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const bottomRef = useRef<HTMLDivElement>(null);
+  const messageListRef = useRef<HTMLDivElement>(null);
+  const sendingRef = useRef(false); // guards double-submit without disabling focused elements
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    // Scroll only this panel's own message list, not scrollIntoView() on a
+    // marker div — that scrolls every scrollable ancestor into view,
+    // including the whole page, which was yanking the window down on send.
+    const el = messageListRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
   }, [displayMessages, loading]);
 
   async function send() {
     const text = input.trim();
-    if (!text || loading) return;
+    if (!text || sendingRef.current) return;
+    sendingRef.current = true;
 
     const nextHistory = [...backendHistory, { role: "user", content: text }];
     setDisplayMessages((m) => [...m, { role: "user", text }]);
@@ -55,6 +61,7 @@ export default function ChatPanel({ onActivity }: { onActivity?: () => void }) {
       setError(e.message || "Something went wrong talking to the agent.");
     } finally {
       setLoading(false);
+      sendingRef.current = false;
     }
   }
 
@@ -65,7 +72,7 @@ export default function ChatPanel({ onActivity }: { onActivity?: () => void }) {
         <div className="text-xs text-slate-500">session {sessionId.slice(0, 8)}</div>
       </div>
 
-      <div className="flex-1 space-y-3 overflow-y-auto p-4">
+      <div ref={messageListRef} className="flex-1 space-y-3 overflow-y-auto p-4">
         {displayMessages.map((m, i) => (
           <div key={i} className={m.role === "user" ? "text-right" : "text-left"}>
             <span
@@ -80,7 +87,6 @@ export default function ChatPanel({ onActivity }: { onActivity?: () => void }) {
         ))}
         {loading && <div className="text-left text-sm text-slate-400">Thinking…</div>}
         {error && <div className="rounded bg-red-50 p-2 text-sm text-red-700">{error}</div>}
-        <div ref={bottomRef} />
       </div>
 
       <div className="flex gap-2 border-t border-slate-200 p-3">
@@ -89,13 +95,21 @@ export default function ChatPanel({ onActivity }: { onActivity?: () => void }) {
           placeholder="e.g. I need a running shoe under 3000 rupees"
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && send()}
-          disabled={loading}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              send();
+            }
+          }}
+          aria-busy={loading}
         />
         <button
           onClick={send}
-          disabled={loading || !input.trim()}
-          className="rounded bg-slate-900 px-4 py-2 text-sm text-white disabled:opacity-40"
+          aria-disabled={loading || !input.trim()}
+          className={
+            "rounded bg-slate-900 px-4 py-2 text-sm text-white " +
+            (loading || !input.trim() ? "pointer-events-none opacity-40" : "")
+          }
         >
           Send
         </button>
