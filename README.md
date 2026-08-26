@@ -16,7 +16,7 @@ and on behalf of another AI agent (agent-readable catalog + API), on Razorpay te
 - [x] Day 5: Agent-readable catalog endpoints (`/api/agent/*`) + buyer-agent simulator (`backend/buyer_agent.py`)
 - [x] Day 6: Chat UI (`ChatPanel`) + live audit-log panel (`AuditLogPanel`), polling every 2.5s
 - [x] Day 7: Deliberate graceful-failure case (payment-provider retry + graceful apology)
-- [ ] Day 8-9: Docker + README polish
+- [ ] Day 8-9: README polish (Docker dropped — see note below)
 - [ ] Day 10: 5-min pitch video
 - [ ] Day 11: Submit
 
@@ -162,11 +162,26 @@ npm run dev
 
 Visit `http://localhost:3000` — it should show the live catalog fetched from the backend.
 
+**On Docker**: we considered containerizing this (and wrote working Dockerfiles +
+a `docker-compose.yml` for it), but the dev machine's virtualization support was
+disabled at the hardware/BIOS level, so Docker Desktop couldn't run to verify the
+setup — rather than ship an untested Docker config under time pressure, we dropped
+it and kept the manual setup above, which has been verified end-to-end multiple
+times. A `docker-compose up` version is a reasonable next step if this continues
+past the buildathon.
+
 ## What broke / build log
 
 (Keep this section updated as we go — the application form asks for real technical
 obstacles, so log them here as they happen instead of reconstructing them later.)
 
+- **Day 8-9**: attempted to containerize the app (working Dockerfiles + compose
+  written), but Docker Desktop failed to start with "virtualization support not
+  detected" — the dev machine's BIOS had Intel VT-x/AMD-V disabled. Rather than
+  burn remaining time chasing a hardware setting or shipping unverified Docker
+  config this close to the deadline, made the call to drop Docker entirely and
+  rely on the manual setup, which is fully tested. A real scoping tradeoff under
+  time pressure, not a shortcut taken lightly.
 - **Day 1**: `pip install` initially hit the global Python environment and conflicted
   with unrelated packages (litellm, mcp). Fixed by giving the backend its own `.venv`.
 - **Day 2-3**: pinning `anthropic==0.34.2` broke against the installed `httpx` version
