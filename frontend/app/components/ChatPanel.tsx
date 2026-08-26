@@ -6,6 +6,23 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 type DisplayMessage = { role: "user" | "assistant"; text: string };
 
+const SPLIT_URL_RE = /(https?:\/\/[^\s]+)/g;
+const IS_URL_RE = /^https?:\/\//; // non-global: safe to reuse, no lastIndex state
+
+// Chat replies are plain strings, so a payment link is just text unless we
+// find and wrap URLs as real <a> tags ourselves.
+function renderWithLinks(text: string) {
+  return text.split(SPLIT_URL_RE).map((part, i) =>
+    IS_URL_RE.test(part) ? (
+      <a key={i} href={part} target="_blank" rel="noopener noreferrer" className="underline">
+        {part}
+      </a>
+    ) : (
+      <span key={i}>{part}</span>
+    )
+  );
+}
+
 export default function ChatPanel({ onActivity }: { onActivity?: () => void }) {
   // Generated client-side only, in an effect: doing this in useState's
   // initializer runs it once during SSR and again on client hydration,
@@ -81,7 +98,7 @@ export default function ChatPanel({ onActivity }: { onActivity?: () => void }) {
                 (m.role === "user" ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-900")
               }
             >
-              {m.text}
+              {renderWithLinks(m.text)}
             </span>
           </div>
         ))}
