@@ -1,0 +1,76 @@
+[
+  {
+    "id": "sku-001",
+    "name": "Trailrunner Mesh Running Shoe",
+    "category": "footwear",
+    "price_inr": 2799,
+    "attributes": { "size_options": [7, 8, 9, 10], "color": "black" },
+    "stock": 24,
+    "description": "Lightweight mesh running shoe, good for daily training."
+  },
+  {
+    "id": "sku-002",
+    "name": "Trailrunner Mesh Running Shoe",
+    "category": "footwear",
+    "price_inr": 2799,
+    "attributes": { "size_options": [7, 8, 9, 10], "color": "blue" },
+    "stock": 12,
+    "description": "Lightweight mesh running shoe, good for daily training."
+  },
+  {
+    "id": "sku-003",
+    "name": "Wireless Ergo Mouse",
+    "category": "electronics",
+    "price_inr": 1299,
+    "attributes": { "connectivity": "bluetooth", "color": "grey" },
+    "stock": 40,
+    "description": "Wireless ergonomic mouse with 18-month battery life.",
+    "return_policy_days": 10
+  },
+  {
+    "id": "sku-004",
+    "name": "Wireless Ergo Mouse",
+    "category": "electronics",
+    "price_inr": 1499,
+    "attributes": { "connectivity": "bluetooth", "color": "black" },
+    "stock": 5,
+    "description": "Wireless ergonomic mouse with 18-month battery life.",
+    "return_policy_days": 10
+  },
+  {
+    "id": "sku-005",
+    "name": "Insulated Steel Water Bottle 1L",
+    "category": "home",
+    "price_inr": 899,
+    "attributes": { "capacity_ml": 1000, "color": "silver" },
+    "stock": 60,
+    "description": "24-hour cold retention, leak-proof lid."
+  },
+  {
+    "id": "sku-006",
+    "name": "Cotton Crew Socks (Pack of 3)",
+    "category": "apparel",
+    "price_inr": 399,
+    "attributes": { "size_options": ["free"], "color": "assorted" },
+    "stock": 100,
+    "description": "Breathable cotton crew socks, pack of 3."
+  },
+  {
+    "id": "sku-007",
+    "name": "Compact Bluetooth Speaker",
+    "category": "electronics",
+    "price_inr": 1999,
+    "attributes": { "battery_hours": 10, "color": "red" },
+    "stock": 18,
+    "description": "IPX5 water-resistant compact speaker."
+  },
+  {
+    "id": "sku-008",
+    "name": "Canvas Laptop Backpack",
+    "category": "bags",
+    "price_inr": 1799,
+    "attributes": { "capacity_l": 22, "color": "olive" },
+    "stock": 30,
+    "description": "Padded 15.6-inch laptop compartment, water-resistant canvas."
+  }
+]
