@@ -42,10 +42,25 @@ To inspect it:
 - Live via the API: `GET http://localhost:8000/api/audit-log`
 - Directly: `sqlite3 backend/data/audit.db "SELECT * FROM agent_actions ORDER BY id DESC LIMIT 10;"`
 
-We chose SQLite over a hosted DB (e.g. Supabase) deliberately: the audit log is
-written by a single backend process with no need for multi-user auth or real-time
-sync, and a file-based DB means a judge can clone the repo and run it with zero
-external signup or credentials — it just works.
+**Why SQLite and not Supabase for this.** I considered Supabase early on, since it's
+Postgres-as-a-service and would've given me a hosted DB with zero server ops. But the
+audit log only needs one thing: a single backend process appending rows and reading
+them back. There's no second service writing to it, no multi-user access, no need for
+real-time sync across clients — so a hosted, networked Postgres instance would be
+solving a problem I don't have here.
+
+What it would cost me: anyone running this repo — a judge included — would first need
+to create their own Supabase project and paste in credentials before the app even
+starts, or I'd have to ship my own project's credentials in the repo, which isn't
+something I'm willing to do. SQLite is just a file. It's created automatically the
+first time the backend runs, no signup, no network call, no `.env` value to chase down
+just to see the audit trail. For a judge cloning this cold, that's the difference
+between "clone and run" and "clone, sign up somewhere, configure, then run."
+
+If this were going into production with multiple services or people hitting the
+audit log concurrently, I'd revisit this — that's a real limitation of SQLite I'm
+aware of, not something I'm pretending isn't there. But for what this component
+actually needs to do inside an 11-day build, it was the right call.
 
 ## Run locally
 
