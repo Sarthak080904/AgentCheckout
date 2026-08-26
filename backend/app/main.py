@@ -1,7 +1,9 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 
 from app.catalog import load_catalog, find_product
+from app.agent import run_agent_turn
 
 app = FastAPI(title="AgentCheckout API")
 
@@ -31,10 +33,17 @@ def get_product(sku_id: str):
     return product
 
 
-# --- Day 2-3: agent chat loop (Claude tool-calling) goes here ---
+class ChatRequest(BaseModel):
+    history: list[dict]  # full prior conversation, e.g. [{"role": "user", "content": "..."}]
+
+
 @app.post("/api/chat")
-def chat():
-    raise HTTPException(status_code=501, detail="Agent chat loop not implemented yet (Day 2-3)")
+def chat(req: ChatRequest):
+    try:
+        result = run_agent_turn(req.history)
+    except RuntimeError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    return {"reply": result["reply"], "messages": result["messages"], "actions": result["actions"]}
 
 
 # --- Day 5: agent-readable endpoints for a second AI agent (buyer-agent) ---

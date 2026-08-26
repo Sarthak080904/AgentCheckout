@@ -11,7 +11,7 @@ and on behalf of another AI agent (agent-readable catalog + API), on Razorpay te
 - [x] Seed catalog (`backend/data/catalog.json`)
 - [x] Backend shell (FastAPI) serving `/api/catalog`
 - [x] Frontend shell (Next.js) rendering the live catalog
-- [ ] Day 2-3: Claude tool-calling agent loop + Razorpay test-mode checkout
+- [x] Day 2-3: Claude tool-calling agent loop + Razorpay test-mode checkout (`/api/chat`)
 - [ ] Day 4: Guardrails + audit log (`agent_actions` table)
 - [ ] Day 5: Agent-readable catalog endpoints + buyer-agent simulator script
 - [ ] Day 6: Chat UI + live agent-reasoning panel
@@ -54,3 +54,11 @@ Visit `http://localhost:3000` — it should show the live catalog fetched from t
 
 (Keep this section updated as we go — the application form asks for real technical
 obstacles, so log them here as they happen instead of reconstructing them later.)
+
+- **Day 1**: `pip install` initially hit the global Python environment and conflicted
+  with unrelated packages (litellm, mcp). Fixed by giving the backend its own `.venv`.
+- **Day 2-3**: pinning `anthropic==0.34.2` broke against the installed `httpx` version
+  (`Client.__init__() got an unexpected keyword argument 'proxies'`) — the SDK's
+  internal httpx client construction changed across versions. Fixed by upgrading to
+  `anthropic>=1.0.0`. Also hit an Anthropic account credit-balance error on the first
+  real API call — not a code bug, just needed billing credits added.
