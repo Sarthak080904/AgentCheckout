@@ -45,6 +45,44 @@ and the same audit log:
 Try it: `python buyer_agent.py "Find me a wireless mouse under 1500 rupees and buy one"`
 (needs the backend running on port 8000 first).
 
+## How to verify agent-to-agent commerce
+
+`buyer_agent.py` is a **separate** Claude-powered agent — it does not import or call
+any code from `backend/app/`. It only knows the public `/api/agent/*` HTTP contract,
+the same way a real external buyer-agent would. This is the actual proof behind the
+"transactable by an AI buyer end to end" claim: two independent AI agents (the human
+chat agent and this one) both transact with the merchant through the same guardrail
+and the same audit log, without sharing a line of code.
+
+**Prerequisites to run it yourself:**
+- The backend running locally (`uvicorn app.main:app --port 8000`)
+- Your own `ANTHROPIC_API_KEY` in `backend/.env` (this script makes its own Claude
+  API calls, separate from the chat agent's)
+- Your own Razorpay test-mode keys in `backend/.env` (same ones the rest of the app
+  uses — no extra signup beyond what's already needed to run the project at all)
+
+**Steps:**
+```bash
+# Terminal 1
+cd backend
+uvicorn app.main:app --port 8000
+
+# Terminal 2 (same venv)
+python buyer_agent.py "Find me a wireless mouse under 1500 rupees and buy one"
+```
+
+**What to expect:** the terminal prints each step —
+`browse_catalog` → `get_quote` → `place_order` — ending with a real Razorpay
+test-mode payment link. If the frontend (`localhost:3000`) is open at the same time,
+a new row tagged `source: agent-to-agent` appears in the live audit panel within
+~2.5s, sitting alongside any `human-chat` rows from the browser chat — same
+guardrail, same log, two independent agents.
+
+Try an over-the-cap example too, to see the guardrail refuse it instead of a human
+policy check: `python buyer_agent.py "I want 2 mechanical keyboards, buy them for me"`
+— the agent should quote the total, recognize it exceeds `AGENT_MAX_AUTO_AMOUNT_INR`,
+and decline to place the order on its own.
+
 ## Audit trail
 
 Every agent tool call (search, product lookup, payment-link creation — allowed or
