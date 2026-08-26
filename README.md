@@ -5,20 +5,26 @@ Razorpay AI Buildathon 2026 — Track 1: AI Growth & Agentic Commerce.
 An AI agent that transacts with a merchant on behalf of a human shopper (chat checkout)
 and on behalf of another AI agent (agent-readable catalog + API), on Razorpay test-mode.
 
-## Status: Day 1 scaffold
+## Status
 
-- [x] Repo structure (`frontend/`, `backend/`)
-- [x] Seed catalog (`backend/data/catalog.json`)
-- [x] Backend shell (FastAPI) serving `/api/catalog`
-- [x] Frontend shell (Next.js) rendering the live catalog
+- [x] Day 1: Repo structure, seed catalog, backend shell (`/api/catalog`), frontend shell rendering it
 - [x] Day 2-3: Claude tool-calling agent loop + Razorpay test-mode checkout (`/api/chat`)
 - [x] Day 4: Guardrails + audit log (`agent_actions` table, `/api/audit-log`)
 - [x] Day 5: Agent-readable catalog endpoints (`/api/agent/*`) + buyer-agent simulator (`backend/buyer_agent.py`)
 - [x] Day 6: Chat UI (`ChatPanel`) + live audit-log panel (`AuditLogPanel`), polling every 2.5s
 - [x] Day 7: Deliberate graceful-failure case (payment-provider retry + graceful apology)
-- [ ] Day 8-9: README polish (Docker dropped — see note below)
+- [x] Day 8-9: README polish (Docker attempted, then dropped — see note in "Run locally")
 - [ ] Day 10: 5-min pitch video
 - [ ] Day 11: Submit
+
+## Contents
+
+- [Architecture](#architecture)
+- [How to verify agent-to-agent commerce](#how-to-verify-agent-to-agent-commerce)
+- [Failure recovery](#failure-recovery-the-one-failure-handled-gracefully)
+- [Audit trail](#audit-trail)
+- [Run locally](#run-locally)
+- [What broke / build log](#what-broke--build-log)
 
 ## Architecture
 
@@ -42,8 +48,8 @@ and the same audit log:
    touches our internal code — proving the merchant is actually "sellable to AI
    buyers," not just chat-enabled.
 
-Try it: `python buyer_agent.py "Find me a wireless mouse under 1500 rupees and buy one"`
-(needs the backend running on port 8000 first).
+See [How to verify agent-to-agent commerce](#how-to-verify-agent-to-agent-commerce)
+below for exact steps and what to expect.
 
 ## How to verify agent-to-agent commerce
 
@@ -175,13 +181,6 @@ past the buildathon.
 (Keep this section updated as we go — the application form asks for real technical
 obstacles, so log them here as they happen instead of reconstructing them later.)
 
-- **Day 8-9**: attempted to containerize the app (working Dockerfiles + compose
-  written), but Docker Desktop failed to start with "virtualization support not
-  detected" — the dev machine's BIOS had Intel VT-x/AMD-V disabled. Rather than
-  burn remaining time chasing a hardware setting or shipping unverified Docker
-  config this close to the deadline, made the call to drop Docker entirely and
-  rely on the manual setup, which is fully tested. A real scoping tradeoff under
-  time pressure, not a shortcut taken lightly.
 - **Day 1**: `pip install` initially hit the global Python environment and conflicted
   with unrelated packages (litellm, mcp). Fixed by giving the backend its own `.venv`.
 - **Day 2-3**: pinning `anthropic==0.34.2` broke against the installed `httpx` version
@@ -212,3 +211,10 @@ obstacles, so log them here as they happen instead of reconstructing them later.
   replies are rendered as plain strings, so the URL was just text. Fixed with
   a small `renderWithLinks()` helper that detects `http(s)` URLs and wraps
   them in real `<a target="_blank">` tags.
+- **Day 8-9**: attempted to containerize the app (working Dockerfiles + compose
+  written), but Docker Desktop failed to start with "virtualization support not
+  detected" — the dev machine's BIOS had Intel VT-x/AMD-V disabled. Rather than
+  burn remaining time chasing a hardware setting or shipping unverified Docker
+  config this close to the deadline, made the call to drop Docker entirely and
+  rely on the manual setup, which is fully tested. A real scoping tradeoff under
+  time pressure, not a shortcut taken lightly.
