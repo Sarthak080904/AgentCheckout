@@ -7,6 +7,7 @@ type Product = {
   price_inr: number;
   description: string;
   stock: number;
+  image_url?: string;
 };
 
 async function getCatalog(): Promise<Product[]> {
@@ -39,6 +40,14 @@ export default async function Home() {
         <ul className="grid gap-3 sm:grid-cols-2">
           {products.map((p) => (
             <li key={p.id} className="rounded border border-slate-200 bg-white p-4">
+              {p.image_url && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={p.image_url}
+                  alt={p.name}
+                  className="mb-3 h-40 w-full rounded object-cover"
+                />
+              )}
               <div className="font-medium">{p.name}</div>
               <div className="text-sm text-slate-500">{p.description}</div>
               <div className="mt-2 text-sm">

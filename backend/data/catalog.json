@@ -6,7 +6,8 @@
     "price_inr": 2799,
     "attributes": { "size_options": [7, 8, 9, 10], "color": "black" },
     "stock": 24,
-    "description": "Lightweight mesh running shoe, good for daily training."
+    "description": "Lightweight mesh running shoe, good for daily training.",
+    "image_url": "https://picsum.photos/seed/sku-001/400/400"
   },
   {
     "id": "sku-002",
@@ -15,7 +16,8 @@
     "price_inr": 2799,
     "attributes": { "size_options": [7, 8, 9, 10], "color": "blue" },
     "stock": 12,
-    "description": "Lightweight mesh running shoe, good for daily training."
+    "description": "Lightweight mesh running shoe, good for daily training.",
+    "image_url": "https://picsum.photos/seed/sku-002/400/400"
   },
   {
     "id": "sku-003",
@@ -25,7 +27,8 @@
     "attributes": { "connectivity": "bluetooth", "color": "grey" },
     "stock": 40,
     "description": "Wireless ergonomic mouse with 18-month battery life.",
-    "return_policy_days": 10
+    "return_policy_days": 10,
+    "image_url": "https://picsum.photos/seed/sku-003/400/400"
   },
   {
     "id": "sku-004",
@@ -35,7 +38,8 @@
     "attributes": { "connectivity": "bluetooth", "color": "black" },
     "stock": 5,
     "description": "Wireless ergonomic mouse with 18-month battery life.",
-    "return_policy_days": 10
+    "return_policy_days": 10,
+    "image_url": "https://picsum.photos/seed/sku-004/400/400"
   },
   {
     "id": "sku-005",
@@ -44,7 +48,8 @@
     "price_inr": 899,
     "attributes": { "capacity_ml": 1000, "color": "silver" },
     "stock": 60,
-    "description": "24-hour cold retention, leak-proof lid."
+    "description": "24-hour cold retention, leak-proof lid.",
+    "image_url": "https://picsum.photos/seed/sku-005/400/400"
   },
   {
     "id": "sku-006",
@@ -53,7 +58,8 @@
     "price_inr": 399,
     "attributes": { "size_options": ["free"], "color": "assorted" },
     "stock": 100,
-    "description": "Breathable cotton crew socks, pack of 3."
+    "description": "Breathable cotton crew socks, pack of 3.",
+    "image_url": "https://picsum.photos/seed/sku-006/400/400"
   },
   {
     "id": "sku-007",
@@ -62,7 +68,8 @@
     "price_inr": 1999,
     "attributes": { "battery_hours": 10, "color": "red" },
     "stock": 18,
-    "description": "IPX5 water-resistant compact speaker."
+    "description": "IPX5 water-resistant compact speaker.",
+    "image_url": "https://picsum.photos/seed/sku-007/400/400"
   },
   {
     "id": "sku-008",
@@ -71,6 +78,109 @@
     "price_inr": 1799,
     "attributes": { "capacity_l": 22, "color": "olive" },
     "stock": 30,
-    "description": "Padded 15.6-inch laptop compartment, water-resistant canvas."
+    "description": "Padded 15.6-inch laptop compartment, water-resistant canvas.",
+    "image_url": "https://picsum.photos/seed/sku-008/400/400"
+  },
+  {
+    "id": "sku-009",
+    "name": "Over-Ear Noise Cancelling Headphones",
+    "category": "electronics",
+    "price_inr": 3499,
+    "attributes": { "battery_hours": 30, "color": "black" },
+    "stock": 15,
+    "description": "Active noise cancellation, 30-hour battery, USB-C fast charge.",
+    "return_policy_days": 7,
+    "image_url": "https://picsum.photos/seed/sku-009/400/400"
+  },
+  {
+    "id": "sku-010",
+    "name": "Mechanical Keyboard (Tenkeyless)",
+    "category": "electronics",
+    "price_inr": 2999,
+    "attributes": { "switch_type": "brown", "color": "white" },
+    "stock": 10,
+    "description": "Hot-swappable tenkeyless mechanical keyboard for desk setups.",
+    "image_url": "https://picsum.photos/seed/sku-010/400/400"
+  },
+  {
+    "id": "sku-011",
+    "name": "Yoga Mat (6mm)",
+    "category": "fitness",
+    "price_inr": 799,
+    "attributes": { "thickness_mm": 6, "color": "teal" },
+    "stock": 45,
+    "description": "Non-slip textured yoga mat, includes carry strap.",
+    "image_url": "https://picsum.photos/seed/sku-011/400/400"
+  },
+  {
+    "id": "sku-012",
+    "name": "Adjustable Dumbbell Set (10kg)",
+    "category": "fitness",
+    "price_inr": 2499,
+    "attributes": { "weight_kg": 10, "color": "black" },
+    "stock": 8,
+    "description": "Pair of adjustable dumbbells, 10kg total, space-saving design.",
+    "image_url": "https://picsum.photos/seed/sku-012/400/400"
+  },
+  {
+    "id": "sku-013",
+    "name": "Ceramic Pour-Over Coffee Set",
+    "category": "home",
+    "price_inr": 1199,
+    "attributes": { "capacity_ml": 500, "color": "white" },
+    "stock": 22,
+    "description": "Pour-over dripper, server, and reusable filter set.",
+    "image_url": "https://picsum.photos/seed/sku-013/400/400"
+  },
+  {
+    "id": "sku-014",
+    "name": "Slim Fit Cotton T-Shirt",
+    "category": "apparel",
+    "price_inr": 599,
+    "attributes": { "size_options": ["S", "M", "L", "XL"], "color": "navy" },
+    "stock": 80,
+    "description": "100% cotton slim-fit crew neck t-shirt.",
+    "image_url": "https://picsum.photos/seed/sku-014/400/400"
+  },
+  {
+    "id": "sku-015",
+    "name": "Slim Fit Cotton T-Shirt",
+    "category": "apparel",
+    "price_inr": 599,
+    "attributes": { "size_options": ["S", "M", "L", "XL"], "color": "white" },
+    "stock": 65,
+    "description": "100% cotton slim-fit crew neck t-shirt.",
+    "image_url": "https://picsum.photos/seed/sku-015/400/400"
+  },
+  {
+    "id": "sku-016",
+    "name": "Portable Power Bank (20000mAh)",
+    "category": "electronics",
+    "price_inr": 1699,
+    "attributes": { "capacity_mah": 20000, "color": "black" },
+    "stock": 35,
+    "description": "20000mAh power bank with dual USB-C fast charging ports.",
+    "return_policy_days": 10,
+    "image_url": "https://picsum.photos/seed/sku-016/400/400"
+  },
+  {
+    "id": "sku-017",
+    "name": "Leather Card Wallet",
+    "category": "bags",
+    "price_inr": 899,
+    "attributes": { "color": "brown", "slots": 6 },
+    "stock": 40,
+    "description": "Slim genuine leather cardholder wallet, 6 card slots.",
+    "image_url": "https://picsum.photos/seed/sku-017/400/400"
+  },
+  {
+    "id": "sku-018",
+    "name": "Desk Plant — Snake Plant (Small)",
+    "category": "home",
+    "price_inr": 449,
+    "attributes": { "pot_included": true, "color": "green" },
+    "stock": 50,
+    "description": "Low-maintenance snake plant in a ceramic pot, ideal for desks.",
+    "image_url": "https://picsum.photos/seed/sku-018/400/400"
   }
 ]
