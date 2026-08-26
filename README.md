@@ -14,7 +14,7 @@ and on behalf of another AI agent (agent-readable catalog + API), on Razorpay te
 - [x] Day 2-3: Claude tool-calling agent loop + Razorpay test-mode checkout (`/api/chat`)
 - [x] Day 4: Guardrails + audit log (`agent_actions` table, `/api/audit-log`)
 - [x] Day 5: Agent-readable catalog endpoints (`/api/agent/*`) + buyer-agent simulator (`backend/buyer_agent.py`)
-- [ ] Day 6: Chat UI + live agent-reasoning panel
+- [x] Day 6: Chat UI (`ChatPanel`) + live audit-log panel (`AuditLogPanel`), polling every 2.5s
 - [ ] Day 7: Deliberate graceful-failure case
 - [ ] Day 8-9: Docker + README polish
 - [ ] Day 10: 5-min pitch video
