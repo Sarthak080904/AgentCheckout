@@ -14,6 +14,7 @@ def _connect() -> sqlite3.Connection:
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             timestamp REAL NOT NULL,
             session_id TEXT,
+            source TEXT NOT NULL DEFAULT 'human-chat',
             tool TEXT NOT NULL,
             input TEXT NOT NULL,
             amount_inr INTEGER,
@@ -30,6 +31,7 @@ def _connect() -> sqlite3.Connection:
 def log_action(
     *,
     session_id: str | None,
+    source: str = "human-chat",  # 'human-chat' | 'agent-to-agent'
     tool: str,
     tool_input: dict,
     result: dict,
@@ -43,12 +45,13 @@ def log_action(
         conn.execute(
             """
             INSERT INTO agent_actions
-                (timestamp, session_id, tool, input, amount_inr, bound_limit_inr, within_bound, result, outcome)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                (timestamp, session_id, source, tool, input, amount_inr, bound_limit_inr, within_bound, result, outcome)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 time.time(),
                 session_id,
+                source,
                 tool,
                 json.dumps(tool_input),
                 amount_inr,

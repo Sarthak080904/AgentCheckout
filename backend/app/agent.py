@@ -2,7 +2,6 @@ from anthropic import Anthropic
 
 from app.config import ANTHROPIC_API_KEY, AGENT_MAX_AUTO_AMOUNT_INR
 from app.tools import TOOL_SCHEMAS, run_tool
-from app.audit import log_action
 
 MODEL = "claude-sonnet-5"
 
@@ -69,33 +68,8 @@ def run_agent_turn(history: list[dict], session_id: str | None = None) -> dict:
         for block in response.content:
             if block.type != "tool_use":
                 continue
-            result = run_tool(block.name, block.input)
+            result = run_tool(block.name, block.input, session_id=session_id, source="human-chat")
             actions.append({"tool": block.name, "input": block.input, "result": result, "reasoning": reasoning})
-
-            if block.name == "create_payment_link":
-                within_bound = result.get("within_bound", True)
-                outcome = "created" if "payment_link" in result else ("blocked_over_limit" if not within_bound else "error")
-                log_action(
-                    session_id=session_id,
-                    tool=block.name,
-                    tool_input=block.input,
-                    result=result,
-                    amount_inr=result.get("amount_inr"),
-                    bound_limit_inr=AGENT_MAX_AUTO_AMOUNT_INR,
-                    within_bound=within_bound,
-                    outcome=outcome,
-                )
-            else:
-                log_action(
-                    session_id=session_id,
-                    tool=block.name,
-                    tool_input=block.input,
-                    result=result,
-                    amount_inr=None,
-                    bound_limit_inr=None,
-                    within_bound=True,
-                    outcome="info",
-                )
 
             tool_results.append(
                 {

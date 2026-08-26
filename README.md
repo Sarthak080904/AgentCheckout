@@ -13,7 +13,7 @@ and on behalf of another AI agent (agent-readable catalog + API), on Razorpay te
 - [x] Frontend shell (Next.js) rendering the live catalog
 - [x] Day 2-3: Claude tool-calling agent loop + Razorpay test-mode checkout (`/api/chat`)
 - [x] Day 4: Guardrails + audit log (`agent_actions` table, `/api/audit-log`)
-- [ ] Day 5: Agent-readable catalog endpoints + buyer-agent simulator script
+- [x] Day 5: Agent-readable catalog endpoints (`/api/agent/*`) + buyer-agent simulator (`backend/buyer_agent.py`)
 - [ ] Day 6: Chat UI + live agent-reasoning panel
 - [ ] Day 7: Deliberate graceful-failure case
 - [ ] Day 8-9: Docker + README polish
@@ -24,11 +24,26 @@ and on behalf of another AI agent (agent-readable catalog + API), on Razorpay te
 
 ```
 frontend (Next.js)  <-->  backend (FastAPI)  <-->  Razorpay test-mode APIs
+                              |         ^
+                              |         |
+                              |    buyer_agent.py (independent AI agent,
+                              |    talks ONLY to /api/agent/*, no shared code)
                               |
-                              +--> catalog.json / DB
-                              +--> agent_actions audit log (Day 4)
-                              +--> /api/agent/* (Day 5, consumed by a second AI agent)
+                              +--> catalog.json
+                              +--> agent_actions audit log (source: human-chat | agent-to-agent)
 ```
+
+Two ways to transact with the merchant, both going through the same guardrails
+and the same audit log:
+1. **Human via chat** — `POST /api/chat`, powered by `backend/app/agent.py`
+2. **Another AI agent, autonomously** — `backend/buyer_agent.py` is a *separate*
+   Claude-powered agent that only knows the `/api/agent/catalog`, `/api/agent/quote`,
+   `/api/agent/order` contract (documented at `GET /api/agent/catalog`). It never
+   touches our internal code — proving the merchant is actually "sellable to AI
+   buyers," not just chat-enabled.
+
+Try it: `python buyer_agent.py "Find me a wireless mouse under 1500 rupees and buy one"`
+(needs the backend running on port 8000 first).
 
 ## Audit trail
 
@@ -94,3 +109,7 @@ obstacles, so log them here as they happen instead of reconstructing them later.
   internal httpx client construction changed across versions. Fixed by upgrading to
   `anthropic>=1.0.0`. Also hit an Anthropic account credit-balance error on the first
   real API call — not a code bug, just needed billing credits added.
+- **Day 5**: `buyer_agent.py` crashed on its final summary print with
+  `UnicodeEncodeError: 'charmap' codec can't encode character '₹'` — Windows'
+  default console codepage (cp1252) can't render the ₹ sign our tool results
+  contain. Fixed by forcing UTF-8 on stdout at the top of the script.
