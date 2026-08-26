@@ -30,6 +30,23 @@ frontend (Next.js)  <-->  backend (FastAPI)  <-->  Razorpay test-mode APIs
                               +--> /api/agent/* (Day 5, consumed by a second AI agent)
 ```
 
+## Audit trail
+
+Every agent tool call (search, product lookup, payment-link creation — allowed or
+blocked) is written to a SQLite database at `backend/data/audit.db`, created
+automatically on first run. Schema documented in
+[`backend/data/schema.sql`](backend/data/schema.sql); implementation in
+[`backend/app/audit.py`](backend/app/audit.py).
+
+To inspect it:
+- Live via the API: `GET http://localhost:8000/api/audit-log`
+- Directly: `sqlite3 backend/data/audit.db "SELECT * FROM agent_actions ORDER BY id DESC LIMIT 10;"`
+
+We chose SQLite over a hosted DB (e.g. Supabase) deliberately: the audit log is
+written by a single backend process with no need for multi-user auth or real-time
+sync, and a file-based DB means a judge can clone the repo and run it with zero
+external signup or credentials — it just works.
+
 ## Run locally
 
 Backend:
