@@ -15,7 +15,7 @@ and on behalf of another AI agent (agent-readable catalog + API), on Razorpay te
 - [x] Day 4: Guardrails + audit log (`agent_actions` table, `/api/audit-log`)
 - [x] Day 5: Agent-readable catalog endpoints (`/api/agent/*`) + buyer-agent simulator (`backend/buyer_agent.py`)
 - [x] Day 6: Chat UI (`ChatPanel`) + live audit-log panel (`AuditLogPanel`), polling every 2.5s
-- [ ] Day 7: Deliberate graceful-failure case
+- [x] Day 7: Deliberate graceful-failure case (payment-provider retry + graceful apology)
 - [ ] Day 8-9: Docker + README polish
 - [ ] Day 10: 5-min pitch video
 - [ ] Day 11: Submit
@@ -82,6 +82,33 @@ Try an over-the-cap example too, to see the guardrail refuse it instead of a hum
 policy check: `python buyer_agent.py "I want 2 mechanical keyboards, buy them for me"`
 — the agent should quote the total, recognize it exceeds `AGENT_MAX_AUTO_AMOUNT_INR`,
 and decline to place the order on its own.
+
+## Failure recovery (the "one failure handled gracefully")
+
+The guardrail (above) is a *policy* refusal — the agent chose not to act. This is
+different: a genuine runtime failure in the Razorpay call itself, caught and
+recovered from instead of crashing the request.
+
+`create_payment_link` (`backend/app/razorpay_client.py`) wraps every Razorpay call
+with one automatic retry. If the first attempt fails (network blip, transient API
+error), it silently retries once before the buyer ever notices. If *both* attempts
+fail, `tools.py` catches `PaymentLinkError` and returns a structured
+`payment_provider_unavailable` result instead of letting the exception 500 the
+request — the agent then apologizes in plain language and offers to try again,
+per the rule in `agent.py`'s system prompt.
+
+**To demo this on demand**, set `SIMULATE_PAYMENT_FAILURES` in `backend/.env`
+(restart the backend after changing it — it's read once at process start):
+- `SIMULATE_PAYMENT_FAILURES=1` — first attempt fails, automatic retry succeeds,
+  buyer sees nothing unusual (check `/api/audit-log` — the successful entry has
+  `"retried_after_failure": true` in its `result`)
+- `SIMULATE_PAYMENT_FAILURES=2` — both attempts fail, the agent apologizes
+  ("Sorry, looks like a temporary issue reaching the payment provider... want me
+  to try again?") instead of the request crashing; asking it to retry afterward
+  succeeds normally since the simulated failures are consumed
+- `SIMULATE_PAYMENT_FAILURES=0` (default) — normal operation, no simulated failures
+
+Leave it at `0` outside of demoing this specific behavior.
 
 ## Audit trail
 

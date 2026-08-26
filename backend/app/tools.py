@@ -1,5 +1,5 @@
 from app.catalog import load_catalog, find_product
-from app.razorpay_client import create_payment_link
+from app.razorpay_client import create_payment_link, PaymentLinkError
 from app.config import AGENT_MAX_AUTO_AMOUNT_INR
 from app.audit import log_action
 
@@ -89,10 +89,26 @@ def _create_payment_link(tool_input: dict) -> dict:
             ),
         }
 
-    link = create_payment_link(
-        amount_inr=total,
-        description=f"{quantity} x {product['name']} ({sku_id})",
-    )
+    try:
+        link = create_payment_link(
+            amount_inr=total,
+            description=f"{quantity} x {product['name']} ({sku_id})",
+        )
+    except PaymentLinkError as e:
+        # Genuine runtime failure (network/API), not a policy refusal — this
+        # is the "one failure handled gracefully" case: caught here instead
+        # of the request 500ing, so the agent can apologize and offer a retry.
+        return {
+            "error": "payment_provider_unavailable",
+            "detail": str(e),
+            "within_bound": True,
+            "amount_inr": total,
+            "message": (
+                "Razorpay didn't confirm the payment link after retrying. "
+                "This looks like a temporary issue on the payment provider's side."
+            ),
+        }
+
     return {"payment_link": link, "total_inr": total, "within_bound": True, "amount_inr": total}
 
 
