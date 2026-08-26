@@ -26,6 +26,12 @@ the same audit log:
    `/api/agent/order` HTTP contract. It never touches our internal code — proving the
    merchant is actually sellable to AI buyers, not just chat-enabled.
 
+The chat agent also grows revenue directly: right after a purchase completes, it
+searches for one complementary, modestly-priced product in a different category
+(e.g. socks with running shoes) and offers it as a single optional add-on — accepting
+it is treated as its own confirmed order, never silently bundled into the first
+payment link.
+
 ## Run locally
 
 Backend:
@@ -80,26 +86,6 @@ logged to SQLite (`backend/data/audit.db`, schema in `backend/data/schema.sql`),
 auto-created on first run. Inspect via `GET /api/audit-log` or
 `sqlite3 backend/data/audit.db "SELECT * FROM agent_actions ORDER BY id DESC LIMIT 10;"`.
 
-**Why SQLite and not Supabase for this.** I considered Supabase early on, since it's
-Postgres-as-a-service and would've given me a hosted DB with zero server ops. But the
-audit log only needs one thing: a single backend process appending rows and reading
-them back. There's no second service writing to it, no multi-user access, no need for
-real-time sync across clients — so a hosted, networked Postgres instance would be
-solving a problem I don't have here.
-
-What it would cost me: anyone running this repo — a judge included — would first need
-to create their own Supabase project and paste in credentials before the app even
-starts, or I'd have to ship my own project's credentials in the repo, which isn't
-something I'm willing to do. SQLite is just a file. It's created automatically the
-first time the backend runs, no signup, no network call, no `.env` value to chase down
-just to see the audit trail. For a judge cloning this cold, that's the difference
-between "clone and run" and "clone, sign up somewhere, configure, then run."
-
-If this were going into production with multiple services or people hitting the
-audit log concurrently, I'd revisit this — that's a real limitation of SQLite I'm
-aware of, not something I'm pretending isn't there. But for what this component
-actually needs to do inside an 11-day build, it was the right call.
-
 ## What broke / build log
 
 - `pip install` initially hit the global Python environment and conflicted with
@@ -123,3 +109,24 @@ actually needs to do inside an 11-day build, it was the right call.
   ("virtualization support not detected" — disabled at the BIOS level on the dev
   machine). Dropped Docker rather than ship an unverified config under time
   pressure; the manual setup above is fully tested.
+
+
+**Why SQLite and not Supabase for this.** I considered Supabase early on, since it's
+Postgres-as-a-service and would've given me a hosted DB with zero server ops. But the
+audit log only needs one thing: a single backend process appending rows and reading
+them back. There's no second service writing to it, no multi-user access, no need for
+real-time sync across clients — so a hosted, networked Postgres instance would be
+solving a problem I don't have here.
+
+What it would cost me: anyone running this repo — a judge included — would first need
+to create their own Supabase project and paste in credentials before the app even
+starts, or I'd have to ship my own project's credentials in the repo, which isn't
+something I'm willing to do. SQLite is just a file. It's created automatically the
+first time the backend runs, no signup, no network call, no `.env` value to chase down
+just to see the audit trail. For a judge cloning this cold, that's the difference
+between "clone and run" and "clone, sign up somewhere, configure, then run."
+
+If this were going into production with multiple services or people hitting the
+audit log concurrently, I'd revisit this — that's a real limitation of SQLite I'm
+aware of, not something I'm pretending isn't there. But for what this component
+actually needs to do inside an 11-day build, it was the right call.
