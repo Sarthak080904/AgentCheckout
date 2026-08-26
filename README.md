@@ -128,3 +128,7 @@ obstacles, so log them here as they happen instead of reconstructing them later.
   while they held focus — disabling a focused element forces a browser blur,
   which was also moving the scroll position. Fixed by removing `disabled` and
   guarding double-submits with a ref instead.
+- **Day 6**: the Razorpay payment link in the chat reply wasn't clickable —
+  replies are rendered as plain strings, so the URL was just text. Fixed with
+  a small `renderWithLinks()` helper that detects `http(s)` URLs and wraps
+  them in real `<a target="_blank">` tags.
