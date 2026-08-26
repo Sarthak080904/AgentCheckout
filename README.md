@@ -113,3 +113,9 @@ obstacles, so log them here as they happen instead of reconstructing them later.
   `UnicodeEncodeError: 'charmap' codec can't encode character '₹'` — Windows'
   default console codepage (cp1252) can't render the ₹ sign our tool results
   contain. Fixed by forcing UTF-8 on stdout at the top of the script.
+- **Day 6**: React hydration error in `ChatPanel` —
+  `Error: Text content does not match server-rendered HTML`. Cause:
+  `useState(() => crypto.randomUUID())` ran once during Next.js's server-side
+  render and again during client hydration, producing two different UUIDs.
+  Fixed by initializing `sessionId` as `""` and generating the real UUID inside
+  a `useEffect` (client-only, runs after hydration).

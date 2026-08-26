@@ -7,7 +7,13 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 type DisplayMessage = { role: "user" | "assistant"; text: string };
 
 export default function ChatPanel({ onActivity }: { onActivity?: () => void }) {
-  const [sessionId] = useState(() => crypto.randomUUID());
+  // Generated client-side only, in an effect: doing this in useState's
+  // initializer runs it once during SSR and again on client hydration,
+  // producing two different UUIDs and a hydration mismatch.
+  const [sessionId, setSessionId] = useState("");
+  useEffect(() => {
+    setSessionId(crypto.randomUUID());
+  }, []);
   const [backendHistory, setBackendHistory] = useState<any[]>([]);
   const [displayMessages, setDisplayMessages] = useState<DisplayMessage[]>([
     { role: "assistant", text: "Hi! Tell me what you're looking for and a budget, and I'll help you check out." },
