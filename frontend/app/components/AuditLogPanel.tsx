@@ -16,13 +16,23 @@ type AuditRow = {
   within_bound: number;
   result: string;
   outcome: string;
+  order_id: string | null;
+  sku_id: string | null;
+  reason: string | null;
 };
 
 const OUTCOME_STYLE: Record<string, string> = {
   created: "bg-emerald-50 text-emerald-700 border-emerald-200",
+  original_payment_completed: "bg-emerald-50 text-emerald-700 border-emerald-200",
+  upsell_payment_created: "bg-emerald-50 text-emerald-700 border-emerald-200",
+  upsell_offered: "bg-sky-50 text-sky-700 border-sky-200",
+  upsell_declined: "bg-slate-50 text-slate-600 border-slate-200",
   blocked_over_limit: "bg-amber-50 text-amber-800 border-amber-300",
+  duplicate_webhook_ignored: "bg-amber-50 text-amber-800 border-amber-300",
   info: "bg-slate-50 text-slate-600 border-slate-200",
   error: "bg-red-50 text-red-700 border-red-200",
+  invalid_webhook: "bg-red-50 text-red-700 border-red-200",
+  original_payment_failed: "bg-red-50 text-red-700 border-red-200",
 };
 
 const SOURCE_STYLE: Record<string, string> = {
@@ -90,7 +100,11 @@ export default function AuditLogPanel({ refreshSignal }: { refreshSignal?: numbe
               {r.amount_inr != null && ` · ₹${r.amount_inr}`}
               {r.bound_limit_inr != null && ` / cap ₹${r.bound_limit_inr}`}
             </div>
+            {r.order_id && (
+              <div className="mb-1 truncate font-mono text-[10px] text-slate-400">{r.order_id}</div>
+            )}
             <div className="truncate text-slate-500">{r.input}</div>
+            {r.reason && <div className="mt-0.5 truncate text-slate-400">{r.reason}</div>}
             <div className="mt-1 text-[10px] text-slate-400">
               {new Date(r.timestamp * 1000).toLocaleTimeString()}
             </div>

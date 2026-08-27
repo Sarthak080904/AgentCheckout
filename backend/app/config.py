@@ -6,6 +6,10 @@ load_dotenv()
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 RAZORPAY_KEY_ID = os.getenv("RAZORPAY_KEY_ID", "")
 RAZORPAY_KEY_SECRET = os.getenv("RAZORPAY_KEY_SECRET", "")
+# Set in the Razorpay dashboard (Settings -> Webhooks) when creating the
+# webhook pointed at /api/webhooks/razorpay; used to verify that inbound
+# webhook calls actually came from Razorpay.
+RAZORPAY_WEBHOOK_SECRET = os.getenv("RAZORPAY_WEBHOOK_SECRET", "")
 
 # Guardrail: agent can never create a payment above this without explicit
 # human confirmation in the UI (Day 4 guardrail work).

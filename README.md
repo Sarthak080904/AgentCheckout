@@ -26,11 +26,9 @@ the same audit log:
    `/api/agent/order` HTTP contract. It never touches our internal code — proving the
    merchant is actually sellable to AI buyers, not just chat-enabled.
 
-The chat agent also grows revenue directly: right after a purchase completes, it
-searches for one complementary, modestly-priced product in a different category
-(e.g. socks with running shoes) and offers it as a single optional add-on — accepting
-it is treated as its own confirmed order, never silently bundled into the first
-payment link.
+The chat agent also grows revenue directly, but only after a purchase is actually
+paid for — see [Payment confirmation & upsell flow](#payment-confirmation--upsell-flow)
+below for how that's enforced in backend code, not just prompted.
 
 ## Run locally
 
@@ -39,7 +37,7 @@ Backend:
 cd backend
 python -m venv .venv && .venv\Scripts\activate   # Windows
 pip install -r requirements.txt
-cp ../.env.example .env   # fill in ANTHROPIC_API_KEY, RAZORPAY_KEY_ID/SECRET
+cp ../.env.example .env   # fill in ANTHROPIC_API_KEY, RAZORPAY_KEY_ID/SECRET, RAZORPAY_WEBHOOK_SECRET
 uvicorn app.main:app --reload --port 8000
 ```
 
@@ -67,6 +65,68 @@ same log, two independent agents.
 To see the guardrail refuse instead: `python buyer_agent.py "I want 2 mechanical
 keyboards, buy them for me"` — exceeds `AGENT_MAX_AUTO_AMOUNT_INR`, agent declines on
 its own.
+
+## Payment confirmation & upsell flow
+
+**A payment link being created does not mean the customer paid.** It only means a
+`pending` order was recorded (`backend/app/orders.py`, `orders` table). The order only
+becomes `paid` when Razorpay's webhook confirms it — nothing else marks it paid, and
+the upsell logic is gated on that status in backend code, not just prompted in the
+system prompt.
+
+Flow:
+1. Customer confirms a product → `create_payment_link` validates quantity/stock/cap,
+   creates the Razorpay link with the local `order_id` embedded in its `notes`, and
+   inserts a `pending` order.
+2. Customer pays via the Razorpay-hosted checkout page.
+3. Razorpay calls `POST /api/webhooks/razorpay` with a signed event. The endpoint
+   verifies the signature (HMAC-SHA256 over the raw body, using
+   `RAZORPAY_WEBHOOK_SECRET`), rejects anything that doesn't match, reads `order_id`
+   back out of the notes, and marks that order `paid` (or `failed` on
+   expiry/cancellation). Duplicate or out-of-order events are safely ignored — a
+   `failed` event can never downgrade an already-`paid` order.
+4. Only once the agent calls `check_order_status` and sees `paid` does it call
+   `offer_upsell(order_id)` — a plain Python function (`orders.select_upsell`, no LLM
+   call) that deterministically picks one product that's in stock, in a different
+   category, not the same SKU, and ≤ ₹1,000 (preferring a thematically related
+   category, falling back to cheapest). This offer is stored in `pending_upsells`.
+5. The buyer's explicit yes/no goes through `confirm_upsell(order_id, accept)` — note
+   there's no `sku_id` field in that tool's schema at all, so the model has no way to
+   substitute a different product; it can only accept or decline the exact one already
+   stored. Accepting creates a genuinely separate order (`kind='upsell'`,
+   `parent_order_id` pointing at the original) and a separate Razorpay payment link.
+
+**Configuring the webhook**: in the Razorpay dashboard, Settings → Webhooks → add
+`http://<your-host>/api/webhooks/razorpay`, subscribe to at least `payment_link.paid`
+and `payment_link.expired`/`payment_link.cancelled`, and copy the webhook secret it
+gives you into `RAZORPAY_WEBHOOK_SECRET` in `backend/.env`.
+
+**Testing the webhook locally** (Razorpay can't reach `localhost` directly):
+- Use a tunnel (e.g. `ngrok http 8000`) and point the dashboard webhook at the
+  `https://*.ngrok.io/api/webhooks/razorpay` URL it gives you, or
+- Simulate it directly without any real payment or tunnel — sign a fake payload
+  yourself and POST it:
+  ```bash
+  python -c "
+  import hmac, hashlib, json
+  secret = 'your_webhook_secret_here'
+  body = json.dumps({
+      'event': 'payment_link.paid',
+      'payload': {'payment_link': {'entity': {'id': 'plink_test', 'notes': {'order_id': 'ord_...'}}}}
+  }).encode()
+  sig = hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
+  print(body.decode()); print(sig)
+  "
+  # then: curl -X POST http://localhost:8000/api/webhooks/razorpay \
+  #   -H "X-Razorpay-Signature: <sig>" -H "Content-Type: application/json" -d '<body>'
+  ```
+  (substitute a real `order_id` from a payment link you just created via the chat or
+  `/api/agent/order`)
+
+The audit log (below) records every step of this — `original_payment_completed`,
+`original_payment_failed`, `upsell_offered`, `upsell_declined`,
+`upsell_payment_created`, `invalid_webhook`, `duplicate_webhook_ignored` — each tagged
+with `order_id` and `sku_id` where relevant, visible in the frontend's live panel too.
 
 ## Failure recovery
 
@@ -150,3 +210,20 @@ actually needs to do inside an 11-day build, it was the right call.
   use markdown (plain text only, bare URLs), and hardened `renderWithLinks()` to
   strip trailing markdown/punctuation from the `href` even if the model slips up
   again, while still showing that trailing text so nothing visually disappears.
+- Moving upsell selection into backend code (`orders.select_upsell`) surfaced a bug
+  the prompt-only version never would have: the affinity map's `"electronics":
+  ["electronics", "bags"]` preferred the *same* category first, which the candidate
+  filter always excludes anyway — a dead, never-reachable preference. Only found it
+  because a test (`test_upsell_is_different_category_and_not_same_sku`) exercises the
+  actual selection function directly. Fixed the affinity map.
+
+## Tests
+
+`backend/tests/test_backend.py` — 20 tests, run with `cd backend && pytest` (needs
+the venv's dependencies installed, including `pytest`). Covers quantity validation
+(zero/negative/over-stock) on both `create_payment_link` and the `/api/agent/*`
+endpoints, the cap guardrail, webhook signature verification (valid/invalid),
+duplicate/out-of-order webhook safety, and the full upsell flow (no offer before
+payment, correct category/price constraints, explicit confirmation, and that
+`confirm_upsell` can't be steered to a different SKU). `create_payment_link` is
+monkeypatched in every test — no real Razorpay calls happen during the test run.

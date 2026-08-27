@@ -21,7 +21,9 @@ def get_client() -> razorpay.Client:
     return _client
 
 
-def _create_payment_link_once(*, amount_inr: int, description: str, customer_name: str) -> dict:
+def _create_payment_link_once(
+    *, amount_inr: int, description: str, customer_name: str, notes: dict | None = None
+) -> dict:
     global _simulated_failures_remaining
     if _simulated_failures_remaining > 0:
         _simulated_failures_remaining -= 1
@@ -37,6 +39,7 @@ def _create_payment_link_once(*, amount_inr: int, description: str, customer_nam
                 "customer": {"name": customer_name},
                 "notify": {"sms": False, "email": False},
                 "reminder_enable": False,
+                "notes": notes or {},
             }
         )
     except Exception as e:
@@ -54,18 +57,29 @@ def _create_payment_link_once(*, amount_inr: int, description: str, customer_nam
 
 
 def create_payment_link(
-    *, amount_inr: int, description: str, customer_name: str = "AgentCheckout Buyer", max_attempts: int = 2
+    *,
+    amount_inr: int,
+    description: str,
+    customer_name: str = "AgentCheckout Buyer",
+    notes: dict | None = None,
+    max_attempts: int = 2,
 ) -> dict:
     """
     Creates a Razorpay test-mode Payment Link, with one automatic retry on
     failure — real transient errors sometimes clear on a second attempt.
     Raises PaymentLinkError if every attempt fails, so the caller can
     surface a graceful failure instead of a raw 500.
+
+    `notes` (e.g. {"order_id": ...}) travels with the Razorpay payment link and
+    comes back in the webhook payload, which is how the webhook maps a
+    Razorpay payment back to our local order.
     """
     last_error: PaymentLinkError | None = None
     for attempt in range(1, max_attempts + 1):
         try:
-            result = _create_payment_link_once(amount_inr=amount_inr, description=description, customer_name=customer_name)
+            result = _create_payment_link_once(
+                amount_inr=amount_inr, description=description, customer_name=customer_name, notes=notes
+            )
             if attempt > 1:
                 result["retried_after_failure"] = True
             return result
