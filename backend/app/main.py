@@ -1,6 +1,7 @@
 import hashlib
 import hmac
 import json
+import time
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -9,9 +10,10 @@ from pydantic import BaseModel
 from app.catalog import load_catalog, find_product, validate_quantity
 from app.agent import run_agent_turn
 from app.audit import list_actions, log_action
-from app.tools import run_tool
+from app.tools import create_order_and_link
 from app.config import AGENT_MAX_AUTO_AMOUNT_INR, RAZORPAY_WEBHOOK_SECRET
 from app.orders import get_order, mark_order_paid, mark_order_failed
+from app.quotes import create_quote, get_quote, consume_quote
 
 app = FastAPI(title="AgentCheckout API")
 
@@ -21,6 +23,14 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+def _quantity_http_error(qty_error: str, available: int) -> HTTPException:
+    # 400 for a malformed request (zero/negative quantity), 422 for a
+    # well-formed request the store just can't fulfill (not enough stock).
+    if qty_error == "invalid_quantity":
+        return HTTPException(status_code=400, detail={"error": qty_error})
+    return HTTPException(status_code=422, detail={"error": qty_error, "available": available})
 
 
 @app.get("/health")
@@ -149,6 +159,13 @@ async def razorpay_webhook(request: Request):
 # the point: a buyer-agent shouldn't need to understand our chat prompt, just
 # this contract. See backend/buyer_agent.py for a working buyer-side agent that
 # consumes exactly this API.
+#
+# Section 2 gate: /api/agent/quote issues a short-lived, server-signed quote_id
+# snapshotting sku/quantity/amount/cap-status. /api/agent/order requires that
+# exact quote_id and rejects anything missing, expired, already-consumed, or
+# that doesn't match the quoted sku/quantity — a buyer agent can propose
+# whatever it wants to /api/agent/quote, but cannot talk its way past the
+# server-computed numbers when it actually tries to pay.
 
 
 @app.get("/api/agent/catalog")
@@ -161,15 +178,23 @@ def agent_catalog():
         "products": load_catalog(),
         "endpoints": {
             "quote": {"method": "POST", "path": "/api/agent/quote", "body": {"sku_id": "string", "quantity": "integer"}},
-            "order": {"method": "POST", "path": "/api/agent/order", "body": {"sku_id": "string", "quantity": "integer", "buyer_agent_id": "string"}},
+            "order": {
+                "method": "POST",
+                "path": "/api/agent/order",
+                "body": {"sku_id": "string", "quantity": "integer", "buyer_agent_id": "string", "quote_id": "string"},
+            },
         },
-        "notes": "orders above the merchant's auto-approval cap are refused by /api/agent/order; check the quote response's within_bound field first.",
+        "notes": (
+            "Orders require a quote_id from /api/agent/quote — quotes expire after 2 minutes and are "
+            "single-use. Orders above the merchant's auto-approval cap are refused."
+        ),
     }
 
 
 class QuoteRequest(BaseModel):
     sku_id: str
     quantity: int = 1
+    buyer_agent_id: str | None = None
 
 
 @app.post("/api/agent/quote")
@@ -180,17 +205,39 @@ def agent_quote(req: QuoteRequest):
 
     qty_error = validate_quantity(req.quantity, product["stock"])
     if qty_error:
-        raise HTTPException(status_code=422, detail={"error": qty_error, "available": product["stock"]})
+        raise _quantity_http_error(qty_error, product["stock"])
 
     total = product["price_inr"] * req.quantity
+    within_bound = total <= AGENT_MAX_AUTO_AMOUNT_INR
+
+    quote = create_quote(
+        buyer_agent_id=req.buyer_agent_id, sku_id=req.sku_id, quantity=req.quantity, amount_inr=total, within_bound=within_bound
+    )
+
+    log_action(
+        session_id=f"agent:{req.buyer_agent_id}" if req.buyer_agent_id else None,
+        source="agent-to-agent",
+        tool="agent_quote",
+        tool_input={"sku_id": req.sku_id, "quantity": req.quantity},
+        result={"quote_id": quote["quote_id"], "amount_inr": total, "within_bound": within_bound},
+        amount_inr=total,
+        bound_limit_inr=AGENT_MAX_AUTO_AMOUNT_INR,
+        within_bound=within_bound,
+        outcome="quote_created",
+        sku_id=req.sku_id,
+        reason=None,
+    )
+
     return {
+        "quote_id": quote["quote_id"],
         "sku_id": req.sku_id,
         "unit_price_inr": product["price_inr"],
         "quantity": req.quantity,
         "total_inr": total,
         "in_stock": product["stock"] >= req.quantity,
-        "within_auto_approval_bound": total <= AGENT_MAX_AUTO_AMOUNT_INR,
+        "within_auto_approval_bound": within_bound,
         "bound_limit_inr": AGENT_MAX_AUTO_AMOUNT_INR,
+        "expires_at": quote["expires_at"],
     }
 
 
@@ -198,24 +245,68 @@ class AgentOrderRequest(BaseModel):
     sku_id: str
     quantity: int = 1
     buyer_agent_id: str
+    quote_id: str | None = None
 
 
 @app.post("/api/agent/order")
 def agent_order(req: AgentOrderRequest):
-    product = find_product(req.sku_id)
-    if not product:
-        raise HTTPException(status_code=404, detail="Product not found")
+    session_id = f"agent:{req.buyer_agent_id}"
 
-    qty_error = validate_quantity(req.quantity, product["stock"])
-    if qty_error:
-        raise HTTPException(status_code=422, detail={"error": qty_error, "available": product["stock"]})
+    def _log(outcome: str, reason: str, *, amount_inr=None, within_bound=True, quote_id=None):
+        log_action(
+            session_id=session_id,
+            source="agent-to-agent",
+            tool="agent_order",
+            tool_input={"sku_id": req.sku_id, "quantity": req.quantity, "quote_id": req.quote_id},
+            result={"outcome": outcome},
+            amount_inr=amount_inr,
+            bound_limit_inr=AGENT_MAX_AUTO_AMOUNT_INR,
+            within_bound=within_bound,
+            outcome=outcome,
+            order_id=quote_id,  # correlation id; a quote_id is as good a handle as an order_id here
+            sku_id=req.sku_id,
+            reason=reason,
+        )
 
-    result = run_tool(
-        "create_payment_link",
-        {"sku_id": req.sku_id, "quantity": req.quantity},
-        session_id=f"agent:{req.buyer_agent_id}",
-        source="agent-to-agent",
-    )
+    if not req.quote_id:
+        _log("quote_missing", "No quote_id supplied with the order request")
+        raise HTTPException(status_code=403, detail={"error": "quote_required"})
+
+    quote = get_quote(req.quote_id)
+    if not quote:
+        _log("quote_invalid", "quote_id does not match any known quote", quote_id=req.quote_id)
+        raise HTTPException(status_code=403, detail={"error": "invalid_quote"})
+
+    if quote["status"] != "active":
+        _log("quote_reused", "Quote has already been consumed by an earlier order", quote_id=req.quote_id)
+        raise HTTPException(status_code=409, detail={"error": "quote_already_consumed"})
+
+    if time.time() > quote["expires_at"]:
+        _log("quote_expired", "Quote's TTL has elapsed", quote_id=req.quote_id)
+        raise HTTPException(status_code=403, detail={"error": "quote_expired"})
+
+    if quote["sku_id"] != req.sku_id or quote["quantity"] != req.quantity:
+        _log("quote_mismatch", "Order's sku_id/quantity does not match what was quoted", quote_id=req.quote_id)
+        raise HTTPException(status_code=400, detail={"error": "quote_mismatch"})
+
+    if not quote["within_bound"]:
+        _log(
+            "blocked_over_limit",
+            f"Quoted amount ₹{quote['amount_inr']} exceeds the ₹{AGENT_MAX_AUTO_AMOUNT_INR} cap",
+            amount_inr=quote["amount_inr"],
+            within_bound=False,
+            quote_id=req.quote_id,
+        )
+        raise HTTPException(status_code=422, detail={"error": "amount_exceeds_auto_limit", "limit_inr": AGENT_MAX_AUTO_AMOUNT_INR})
+
+    result = create_order_and_link(sku_id=req.sku_id, quantity=req.quantity, session_id=session_id, source="agent-to-agent")
+
     if "payment_link" not in result:
-        raise HTTPException(status_code=422, detail=result)
+        error = result.get("error", "unknown_error")
+        _log("error", result.get("message", error), amount_inr=result.get("amount_inr"), quote_id=req.quote_id)
+        status = 503 if error == "payment_provider_unavailable" else 422
+        raise HTTPException(status_code=status, detail=result)
+
+    consume_quote(req.quote_id)
+    _log("created", "Payment link created", amount_inr=result["amount_inr"], quote_id=req.quote_id)
     return result

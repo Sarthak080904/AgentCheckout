@@ -12,6 +12,10 @@ from app.orders import (
     create_pending_upsell,
     get_offered_upsell,
     resolve_pending_upsell,
+    create_pending_confirmation,
+    get_latest_confirmation,
+    resolve_confirmation,
+    consume_confirmation,
 )
 
 TOOL_SCHEMAS = [
@@ -37,10 +41,45 @@ TOOL_SCHEMAS = [
         },
     },
     {
+        "name": "request_purchase_confirmation",
+        "description": (
+            "Register a pending purchase with the backend BEFORE asking the buyer to confirm it. Call this "
+            "first — it computes the real price from the catalog. Present the returned product name, quantity, "
+            "and amount to the buyer verbatim, then wait for their explicit yes/no before calling confirm_purchase."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "sku_id": {"type": "string"},
+                "quantity": {"type": "integer", "default": 1},
+            },
+            "required": ["sku_id"],
+        },
+    },
+    {
+        "name": "confirm_purchase",
+        "description": (
+            "Record the buyer's explicit yes/no answer to the purchase you just asked them to confirm. Must "
+            "reference the exact same sku_id and quantity you called request_purchase_confirmation with — a "
+            "different product or quantity requires a new request_purchase_confirmation first. Only after this "
+            "returns status='confirmed' may you call create_payment_link."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "sku_id": {"type": "string"},
+                "quantity": {"type": "integer", "default": 1},
+                "confirmed": {"type": "boolean"},
+            },
+            "required": ["sku_id", "quantity", "confirmed"],
+        },
+    },
+    {
         "name": "create_payment_link",
         "description": (
-            "Create a Razorpay test-mode payment link for a product so the buyer can complete checkout. "
-            "Only call this after the buyer has explicitly confirmed the specific product and quantity they want to buy. "
+            "Create a Razorpay test-mode payment link for a product so the buyer can complete checkout. Requires "
+            "a matching, still-valid confirm_purchase(confirmed=true) for this exact sku_id/quantity in this "
+            "session — refused otherwise, even if the conversation looks like the buyer already agreed. "
             "This creates a PENDING order — it does not mean the buyer has paid yet."
         ),
         "input_schema": {
@@ -116,7 +155,7 @@ def _get_product(tool_input: dict) -> dict:
     return {"product": product} if product else {"error": "not_found"}
 
 
-def _create_order_and_link(
+def create_order_and_link(
     *,
     sku_id: str,
     quantity: int,
@@ -126,11 +165,14 @@ def _create_order_and_link(
     parent_order_id: str | None = None,
 ) -> dict:
     """
-    Shared by the original create_payment_link tool and confirm_upsell's
-    accept path — one place that validates, checks the cap, creates the
-    Razorpay link, and records the pending order. Returns a dict that always
-    includes within_bound/amount_inr (for audit logging) plus either
-    "payment_link"+"order_id" on success or "error" on failure.
+    The shared core: validate, check the cap, create the Razorpay link, and
+    record the order. Used by three different gates, each of which decides
+    separately whether it's even allowed to call this:
+      - the chat create_payment_link tool (after the confirmation gate below)
+      - confirm_upsell's accept path (after the pending-upsell gate)
+      - /api/agent/order in main.py (after the quote-token gate)
+    Returns a dict that always includes within_bound/amount_inr (for audit
+    logging) plus either "payment_link"+"order_id" on success or "error".
     """
     product = find_product(sku_id)
     if not product:
@@ -148,8 +190,10 @@ def _create_order_and_link(
     total = product["price_inr"] * quantity
 
     # Guardrail: never create a payment link above the configured cap,
-    # regardless of whether this is the original purchase or an upsell.
-    if total > AGENT_MAX_AUTO_AMOUNT_INR:
+    # regardless of which gate let the request through. Never send a
+    # zero/negative amount to Razorpay either (quantity>=1 and price>0 in the
+    # catalog already guarantee total > 0, but the check is cheap insurance).
+    if total <= 0 or total > AGENT_MAX_AUTO_AMOUNT_INR:
         return {
             "error": "amount_exceeds_auto_limit",
             "amount_inr": total,
@@ -205,14 +249,110 @@ def _create_order_and_link(
     }
 
 
+_CONFIRMATION_ERRORS = {"confirmation_required", "confirmation_mismatch", "confirmation_already_consumed"}
+
+
 def _create_payment_link(tool_input: dict, *, session_id: str | None, source: str) -> dict:
-    return _create_order_and_link(
-        sku_id=tool_input["sku_id"],
-        quantity=tool_input.get("quantity", 1),
-        session_id=session_id,
-        source=source,
-        kind="original",
+    sku_id = tool_input["sku_id"]
+    quantity = tool_input.get("quantity", 1)
+
+    # Backend confirmation gate — the ONLY thing that can prove the buyer
+    # actually approved this exact product/quantity, independent of whatever
+    # the model claims happened in the conversation. This tool is only ever
+    # reached from the human-chat loop (agent-to-agent uses the quote-token
+    # gate in main.py instead, which calls create_order_and_link directly).
+    if not session_id:
+        return {"error": "session_required", "within_bound": True, "amount_inr": None}
+
+    pending = get_latest_confirmation(session_id)
+    if not pending or pending["status"] != "confirmed":
+        return {
+            "error": "confirmation_required",
+            "within_bound": True,
+            "amount_inr": None,
+            "message": "No confirmed purchase found for this session — ask the buyer to confirm first.",
+        }
+    if pending["sku_id"] != sku_id or pending["quantity"] != quantity:
+        return {
+            "error": "confirmation_mismatch",
+            "within_bound": True,
+            "amount_inr": None,
+            "message": "The confirmed purchase doesn't match this request — a new confirmation is required.",
+        }
+    if not consume_confirmation(pending["id"]):
+        # Single-use: someone already consumed this exact confirmation
+        # (e.g. a duplicate/retried tool call) — refuse rather than double-charge.
+        return {
+            "error": "confirmation_already_consumed",
+            "within_bound": True,
+            "amount_inr": None,
+            "message": "This confirmation has already been used to create a payment link.",
+        }
+
+    return create_order_and_link(sku_id=sku_id, quantity=quantity, session_id=session_id, source=source, kind="original")
+
+
+def _request_purchase_confirmation(tool_input: dict, *, session_id: str | None) -> dict:
+    if not session_id:
+        return {"error": "session_required"}
+
+    sku_id = tool_input["sku_id"]
+    quantity = tool_input.get("quantity", 1)
+    product = find_product(sku_id)
+    if not product:
+        return {"error": "not_found"}
+
+    qty_error = validate_quantity(quantity, product["stock"])
+    if qty_error:
+        return {"error": qty_error, "available": product["stock"]}
+
+    amount = product["price_inr"] * quantity
+    confirmation_id = create_pending_confirmation(
+        session_id=session_id, sku_id=sku_id, quantity=quantity, amount_inr=amount, product_name=product["name"]
     )
+    return {
+        "confirmation_id": confirmation_id,
+        "sku_id": sku_id,
+        "quantity": quantity,
+        "amount_inr": amount,
+        "product_name": product["name"],
+    }
+
+
+def _confirm_purchase(tool_input: dict, *, session_id: str | None) -> dict:
+    if not session_id:
+        return {"error": "session_required"}
+
+    sku_id = tool_input["sku_id"]
+    quantity = tool_input.get("quantity", 1)
+    confirmed = tool_input["confirmed"]
+
+    pending = get_latest_confirmation(session_id)
+    if not pending or pending["status"] != "requested":
+        return {"error": "no_pending_confirmation"}
+
+    if pending["sku_id"] != sku_id or pending["quantity"] != quantity:
+        # Whatever was pending doesn't match what's being confirmed — reject
+        # it outright rather than silently confirming the wrong thing.
+        resolve_confirmation(pending["id"], "rejected")
+        return {
+            "error": "confirmation_mismatch",
+            "confirmation_id": pending["id"],
+            "message": "This doesn't match the product/quantity that was requested for confirmation.",
+        }
+
+    if not confirmed:
+        resolve_confirmation(pending["id"], "rejected")
+        return {"confirmation_id": pending["id"], "status": "rejected", "sku_id": sku_id, "quantity": quantity}
+
+    resolve_confirmation(pending["id"], "confirmed")
+    return {
+        "confirmation_id": pending["id"],
+        "status": "confirmed",
+        "sku_id": sku_id,
+        "quantity": quantity,
+        "amount_inr": pending["amount_inr"],
+    }
 
 
 def _check_order_status(tool_input: dict) -> dict:
@@ -307,7 +447,7 @@ def _confirm_upsell(tool_input: dict, *, session_id: str | None, source: str) ->
 
     # The SKU comes ONLY from the stored offer, never from tool_input — the
     # model has no way to substitute a different product at this step.
-    result = _create_order_and_link(
+    result = create_order_and_link(
         sku_id=pending["sku_id"],
         quantity=1,
         session_id=session_id,
@@ -324,6 +464,8 @@ def _confirm_upsell(tool_input: dict, *, session_id: str | None, source: str) ->
 _HANDLERS = {
     "search_catalog": lambda inp, **ctx: _search_catalog(inp),
     "get_product": lambda inp, **ctx: _get_product(inp),
+    "request_purchase_confirmation": lambda inp, **ctx: _request_purchase_confirmation(inp, session_id=ctx["session_id"]),
+    "confirm_purchase": lambda inp, **ctx: _confirm_purchase(inp, session_id=ctx["session_id"]),
     "create_payment_link": lambda inp, **ctx: _create_payment_link(inp, session_id=ctx["session_id"], source=ctx["source"]),
     "check_order_status": lambda inp, **ctx: _check_order_status(inp),
     "offer_upsell": lambda inp, **ctx: _offer_upsell(inp, session_id=ctx["session_id"]),
@@ -356,7 +498,18 @@ def run_tool(name: str, tool_input: dict, *, session_id: str | None = None, sour
     is_money_action = name in _MONEY_TOOLS
     within_bound = result.get("within_bound", True)
 
-    if name == "confirm_upsell":
+    if name == "request_purchase_confirmation":
+        outcome = "purchase_confirmation_requested" if "error" not in result else "error"
+    elif name == "confirm_purchase":
+        if result.get("status") == "confirmed":
+            outcome = "purchase_confirmed"
+        elif result.get("status") == "rejected" or "error" in result:
+            outcome = "purchase_rejected"
+        else:
+            outcome = "info"
+    elif name == "create_payment_link" and result.get("error") in _CONFIRMATION_ERRORS:
+        outcome = "purchase_rejected"
+    elif name == "confirm_upsell":
         if "payment_link" in result:
             outcome = "upsell_payment_created" if result.get("status") != "declined" else "upsell_declined"
         elif result.get("status") == "declined":
@@ -377,6 +530,8 @@ def run_tool(name: str, tool_input: dict, *, session_id: str | None = None, sour
         outcome = _OUTCOME_BY_TOOL.get(name, "info")
 
     order_id = result.get("order_id") or result.get("source_order_id") or tool_input.get("order_id")
+    if order_id is None and result.get("confirmation_id") is not None:
+        order_id = f"conf_{result['confirmation_id']}"  # correlation id, reusing the generic column
     sku_id = tool_input.get("sku_id") or result.get("sku_id") or result.get("upsell_sku_id")
     reason = result.get("message")
 

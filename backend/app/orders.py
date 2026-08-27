@@ -166,3 +166,63 @@ def resolve_pending_upsell(pending_id: int, status: str) -> None:
     with conn:
         conn.execute("UPDATE pending_upsells SET status = ? WHERE id = ?", (status, pending_id))
     conn.close()
+
+
+# --- Human-chat purchase confirmation gate ----------------------------------
+
+
+def create_pending_confirmation(
+    *, session_id: str, sku_id: str, quantity: int, amount_inr: int, product_name: str
+) -> int:
+    conn = connect()
+    with conn:
+        cur = conn.execute(
+            """
+            INSERT INTO pending_confirmations
+                (session_id, sku_id, quantity, amount_inr, product_name, status, created_at)
+            VALUES (?, ?, ?, ?, ?, 'requested', ?)
+            """,
+            (session_id, sku_id, quantity, amount_inr, product_name, time.time()),
+        )
+        confirmation_id = cur.lastrowid
+    conn.close()
+    return confirmation_id
+
+
+def get_latest_confirmation(session_id: str) -> dict | None:
+    """The most recent confirmation row for this session, whatever its
+    status — callers check `status` themselves rather than filtering here,
+    since e.g. confirm_purchase needs to see 'requested' rows specifically
+    while create_payment_link needs to see 'confirmed' ones."""
+    conn = connect()
+    row = conn.execute(
+        "SELECT * FROM pending_confirmations WHERE session_id = ? ORDER BY id DESC LIMIT 1",
+        (session_id,),
+    ).fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def resolve_confirmation(confirmation_id: int, status: str) -> None:
+    conn = connect()
+    with conn:
+        conn.execute(
+            "UPDATE pending_confirmations SET status = ?, confirmed_at = ? WHERE id = ?",
+            (status, time.time(), confirmation_id),
+        )
+    conn.close()
+
+
+def consume_confirmation(confirmation_id: int) -> bool:
+    """Single-use: only succeeds (and only ever will succeed once) if the row
+    is currently 'confirmed'. Returns False if it's already been consumed or
+    was never confirmed — the caller must treat that as a hard rejection."""
+    conn = connect()
+    with conn:
+        cur = conn.execute(
+            "UPDATE pending_confirmations SET status = 'consumed' WHERE id = ? AND status = 'confirmed'",
+            (confirmation_id,),
+        )
+        changed = cur.rowcount > 0
+    conn.close()
+    return changed

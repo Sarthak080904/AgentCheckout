@@ -38,7 +38,10 @@ Process:
 1. Call browse_catalog to find products matching the buyer's request.
 2. Pick the single best match. If several are equally good, pick the first in stock.
 3. Call get_quote to confirm price and whether it's within the merchant's auto-approval bound.
-4. If within_auto_approval_bound is true, call place_order to complete the purchase.
+   It returns a quote_id — the merchant requires this exact quote_id to place the order, and
+   it expires after 2 minutes, so place_order right away rather than waiting.
+4. If within_auto_approval_bound is true, call place_order with the SAME sku_id, quantity, and
+   quote_id from that quote — a mismatched or missing quote_id will be rejected.
 5. If it's false, do NOT place the order — report back that this order needs human approval.
 
 Be decisive: you're acting autonomously, not asking the buyer follow-up questions.
@@ -65,14 +68,19 @@ TOOL_SCHEMAS = [
     },
     {
         "name": "place_order",
-        "description": "Place the order and get a Razorpay test-mode payment link. Only call after a quote confirms within_auto_approval_bound is true.",
+        "description": (
+            "Place the order and get a Razorpay test-mode payment link. Only call after a quote confirms "
+            "within_auto_approval_bound is true. Requires the exact quote_id from that quote — the merchant "
+            "rejects orders with a missing, expired, reused, or mismatched quote_id."
+        ),
         "input_schema": {
             "type": "object",
             "properties": {
                 "sku_id": {"type": "string"},
                 "quantity": {"type": "integer", "default": 1},
+                "quote_id": {"type": "string"},
             },
-            "required": ["sku_id"],
+            "required": ["sku_id", "quote_id"],
         },
     },
 ]

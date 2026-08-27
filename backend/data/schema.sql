@@ -21,7 +21,10 @@ CREATE TABLE IF NOT EXISTS agent_actions (
 -- outcome values: 'info' | 'created' | 'blocked_over_limit' | 'error' |
 --   'original_payment_completed' | 'original_payment_failed' |
 --   'upsell_offered' | 'upsell_declined' | 'upsell_payment_created' |
---   'duplicate_webhook_ignored' | 'invalid_webhook'
+--   'duplicate_webhook_ignored' | 'invalid_webhook' |
+--   'purchase_confirmation_requested' | 'purchase_confirmed' | 'purchase_rejected' |
+--   'quote_created' | 'quote_missing' | 'quote_invalid' | 'quote_expired' |
+--   'quote_reused' | 'quote_mismatch'
 
 CREATE TABLE IF NOT EXISTS orders (
     order_id                  TEXT PRIMARY KEY,       -- e.g. 'ord_<16 hex chars>'
@@ -45,4 +48,33 @@ CREATE TABLE IF NOT EXISTS pending_upsells (
     sku_id           TEXT NOT NULL,          -- the exact product offered (confirmation can't change this)
     status           TEXT NOT NULL DEFAULT 'offered',  -- 'offered' | 'accepted' | 'declined'
     created_at       REAL NOT NULL
+);
+
+-- Human-chat confirmation gate: create_payment_link refuses to run unless a
+-- row here for the same session_id is 'confirmed' and matches the
+-- sku/quantity/amount exactly. Single-use — consumed on success.
+CREATE TABLE IF NOT EXISTS pending_confirmations (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id      TEXT NOT NULL,
+    sku_id          TEXT NOT NULL,
+    quantity        INTEGER NOT NULL,
+    amount_inr      INTEGER NOT NULL,       -- computed server-side from the catalog, never trusted from the model
+    product_name    TEXT,
+    status          TEXT NOT NULL DEFAULT 'requested',  -- 'requested' | 'confirmed' | 'rejected' | 'consumed'
+    created_at      REAL NOT NULL,
+    confirmed_at    REAL
+);
+
+-- Agent-to-agent quote gate: /api/agent/order requires a quote_id from here,
+-- matching exactly, not expired, and not already consumed.
+CREATE TABLE IF NOT EXISTS quotes (
+    quote_id         TEXT PRIMARY KEY,       -- e.g. 'qte_<16 hex chars>'
+    buyer_agent_id   TEXT,
+    sku_id           TEXT NOT NULL,
+    quantity         INTEGER NOT NULL,
+    amount_inr       INTEGER NOT NULL,
+    within_bound     INTEGER NOT NULL,       -- snapshotted cap-check result at quote time
+    status           TEXT NOT NULL DEFAULT 'active',  -- 'active' | 'consumed'
+    created_at       REAL NOT NULL,
+    expires_at       REAL NOT NULL           -- created_at + 120s
 );

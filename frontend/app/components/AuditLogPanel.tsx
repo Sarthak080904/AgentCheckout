@@ -25,14 +25,23 @@ const OUTCOME_STYLE: Record<string, string> = {
   created: "bg-emerald-50 text-emerald-700 border-emerald-200",
   original_payment_completed: "bg-emerald-50 text-emerald-700 border-emerald-200",
   upsell_payment_created: "bg-emerald-50 text-emerald-700 border-emerald-200",
+  purchase_confirmed: "bg-emerald-50 text-emerald-700 border-emerald-200",
+  quote_created: "bg-emerald-50 text-emerald-700 border-emerald-200",
   upsell_offered: "bg-sky-50 text-sky-700 border-sky-200",
+  purchase_confirmation_requested: "bg-sky-50 text-sky-700 border-sky-200",
   upsell_declined: "bg-slate-50 text-slate-600 border-slate-200",
+  purchase_rejected: "bg-slate-50 text-slate-600 border-slate-200",
   blocked_over_limit: "bg-amber-50 text-amber-800 border-amber-300",
   duplicate_webhook_ignored: "bg-amber-50 text-amber-800 border-amber-300",
+  quote_expired: "bg-amber-50 text-amber-800 border-amber-300",
+  quote_reused: "bg-amber-50 text-amber-800 border-amber-300",
   info: "bg-slate-50 text-slate-600 border-slate-200",
   error: "bg-red-50 text-red-700 border-red-200",
   invalid_webhook: "bg-red-50 text-red-700 border-red-200",
   original_payment_failed: "bg-red-50 text-red-700 border-red-200",
+  quote_missing: "bg-red-50 text-red-700 border-red-200",
+  quote_invalid: "bg-red-50 text-red-700 border-red-200",
+  quote_mismatch: "bg-red-50 text-red-700 border-red-200",
 };
 
 const SOURCE_STYLE: Record<string, string> = {

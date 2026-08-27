@@ -46,6 +46,35 @@ CREATE TABLE IF NOT EXISTS pending_upsells (
     status TEXT NOT NULL DEFAULT 'offered',
     created_at REAL NOT NULL
 );
+
+-- Human-chat confirmation gate (section 1): create_payment_link refuses to
+-- run unless a row here for the same session_id is 'confirmed' and matches
+-- the sku/quantity/amount exactly. Single-use: consumed on success.
+CREATE TABLE IF NOT EXISTS pending_confirmations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id TEXT NOT NULL,
+    sku_id TEXT NOT NULL,
+    quantity INTEGER NOT NULL,
+    amount_inr INTEGER NOT NULL,
+    product_name TEXT,
+    status TEXT NOT NULL DEFAULT 'requested',  -- requested | confirmed | rejected | consumed
+    created_at REAL NOT NULL,
+    confirmed_at REAL
+);
+
+-- Agent-to-agent quote gate (section 2): /api/agent/order requires a
+-- quote_id from here, matching exactly and not expired/already consumed.
+CREATE TABLE IF NOT EXISTS quotes (
+    quote_id TEXT PRIMARY KEY,
+    buyer_agent_id TEXT,
+    sku_id TEXT NOT NULL,
+    quantity INTEGER NOT NULL,
+    amount_inr INTEGER NOT NULL,
+    within_bound INTEGER NOT NULL,
+    status TEXT NOT NULL DEFAULT 'active',  -- active | consumed
+    created_at REAL NOT NULL,
+    expires_at REAL NOT NULL
+);
 """
 
 # Additive migration for DBs created before order_id/sku_id/reason existed on

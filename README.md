@@ -66,6 +66,76 @@ To see the guardrail refuse instead: `python buyer_agent.py "I want 2 mechanical
 keyboards, buy them for me"` — exceeds `AGENT_MAX_AUTO_AMOUNT_INR`, agent declines on
 its own.
 
+## Purchase confirmation gate (human chat)
+
+Nothing in the system prompt can *prove* a buyer actually approved a purchase — a
+model slip could call `create_payment_link` without one. So confirmation is a backend
+state machine, not a prompt instruction:
+
+1. `request_purchase_confirmation(sku_id, quantity)` — computes the real amount from
+   the catalog (never trusts a number the model says) and stores a `pending_confirmations`
+   row, `status='requested'`.
+2. `confirm_purchase(sku_id, quantity, confirmed)` — must reference the exact sku_id/
+   quantity that was requested, or it's rejected as a mismatch. Transitions the row to
+   `confirmed` or `rejected`.
+3. `create_payment_link(sku_id, quantity)` — refuses to run unless there's a `confirmed`
+   row for that session whose sku_id/quantity match *exactly*. On success it atomically
+   consumes the row (`status='consumed'`) — **single-use**: the same confirmation can
+   never authorize a second payment link, and a different product/quantity always needs
+   a fresh `request_purchase_confirmation`.
+
+Rejected requests, mapped to what actually happens:
+- No confirmation at all → `create_payment_link` returns `confirmation_required`
+- Confirmed sku-A, qty 1, then tried to buy sku-B or qty 2 → `confirmation_mismatch`
+- Reusing an already-consumed confirmation → `confirmation_already_consumed`
+- Buyer said no → `confirm_purchase` returns `status: "rejected"`, no link is ever created
+
+This is why `agent.py`'s system prompt never claims a purchase is approved on its own
+authority — it only ever *reports* what `confirm_purchase`/`create_payment_link`
+actually returned.
+
+## Agent-to-agent quote gate
+
+The equivalent protection for `buyer_agent.py`/any external buyer agent, since prompts
+don't apply there at all — this is pure HTTP contract enforcement:
+
+1. `POST /api/agent/quote` snapshots `sku_id`/`quantity`/`amount_inr`/cap-status
+   server-side and returns a `quote_id`, valid for **2 minutes**.
+2. `POST /api/agent/order` requires that exact `quote_id` and rejects:
+   - missing `quote_id` → `403`
+   - unknown `quote_id` → `403`
+   - expired `quote_id` → `403`
+   - already-consumed `quote_id` (reused) → `409`
+   - `sku_id`/`quantity` that don't match what was quoted → `400`
+   - quote reports over the auto-approval cap → `422`
+3. On success, the quote is marked consumed — a valid quote authorizes exactly one order.
+
+A buyer agent can ask for whatever quote it wants, but it cannot talk its way into an
+order that doesn't match the server's own numbers.
+
+**Example rejected requests** (run against a local backend on port 8000):
+```bash
+# Missing quote_id -> 403
+curl -X POST http://localhost:8000/api/agent/order \
+  -H "Content-Type: application/json" \
+  -d '{"sku_id": "sku-006", "quantity": 1, "buyer_agent_id": "test"}'
+
+# Reusing a quote_id from an order that already succeeded -> 409
+curl -X POST http://localhost:8000/api/agent/order \
+  -H "Content-Type: application/json" \
+  -d '{"sku_id": "sku-006", "quantity": 1, "buyer_agent_id": "test", "quote_id": "qte_already_used"}'
+
+# Quoted quantity 1, order tries quantity 2 -> 400 (quote_mismatch)
+curl -X POST http://localhost:8000/api/agent/order \
+  -H "Content-Type: application/json" \
+  -d '{"sku_id": "sku-006", "quantity": 2, "buyer_agent_id": "test", "quote_id": "<a real qty-1 quote_id>"}'
+
+# Zero quantity -> 400 (invalid_quantity)
+curl -X POST http://localhost:8000/api/agent/quote \
+  -H "Content-Type: application/json" \
+  -d '{"sku_id": "sku-006", "quantity": 0}'
+```
+
 ## Payment confirmation & upsell flow
 
 **A payment link being created does not mean the customer paid.** It only means a
@@ -75,9 +145,9 @@ the upsell logic is gated on that status in backend code, not just prompted in t
 system prompt.
 
 Flow:
-1. Customer confirms a product → `create_payment_link` validates quantity/stock/cap,
-   creates the Razorpay link with the local `order_id` embedded in its `notes`, and
-   inserts a `pending` order.
+1. Customer confirms a product (via the gate above) → `create_payment_link` validates
+   quantity/stock/cap, creates the Razorpay link with the local `order_id` embedded in
+   its `notes`, and inserts a `pending` order.
 2. Customer pays via the Razorpay-hosted checkout page.
 3. Razorpay calls `POST /api/webhooks/razorpay` with a signed event. The endpoint
    verifies the signature (HMAC-SHA256 over the raw body, using
@@ -131,10 +201,14 @@ gives you into `RAZORPAY_WEBHOOK_SECRET` in `backend/.env`.
   (substitute a real `order_id` from a payment link you just created via the chat or
   `/api/agent/order`)
 
-The audit log (below) records every step of this — `original_payment_completed`,
+The audit log (below) records every step of every flow on this page —
+`purchase_confirmation_requested`, `purchase_confirmed`, `purchase_rejected`,
+`quote_created`, `quote_missing`/`quote_invalid`/`quote_expired`/`quote_reused`/
+`quote_mismatch`, `blocked_over_limit`, `created`, `original_payment_completed`,
 `original_payment_failed`, `upsell_offered`, `upsell_declined`,
 `upsell_payment_created`, `invalid_webhook`, `duplicate_webhook_ignored` — each tagged
-with `order_id` and `sku_id` where relevant, visible in the frontend's live panel too.
+with `order_id`/`sku_id`/a human-readable `reason` where relevant, visible in the
+frontend's live panel too.
 
 ## Failure recovery
 
@@ -224,14 +298,45 @@ actually needs to do inside an 11-day build, it was the right call.
   filter always excludes anyway — a dead, never-reachable preference. Only found it
   because a test (`test_upsell_is_different_category_and_not_same_sku`) exercises the
   actual selection function directly. Fixed the affinity map.
+- After adding the backend confirmation gate, the first live test showed the agent
+  asking the buyer to confirm *twice* — once informally ("want this one?"), then
+  again after calling `request_purchase_confirmation` in a later turn ("Confirm:
+  X, qty 1, total Rs Y?"). Not a correctness bug (the gate still held), but a real
+  UX regression — an extra round-trip the buyer shouldn't need. Cause: the prompt
+  said to call the tool "as soon as the buyer has picked a product," which the
+  model interpreted as *after* an initial informal ask rather than *instead of* one.
+  Fixed by making the instruction explicit: call `request_purchase_confirmation`
+  before saying anything, and use its returned amount as the one and only
+  confirmation question. Verified live — collapsed back to a single confirmation
+  round-trip.
 
 ## Tests
 
-`backend/tests/test_backend.py` — 20 tests, run with `cd backend && pytest` (needs
-the venv's dependencies installed, including `pytest`). Covers quantity validation
-(zero/negative/over-stock) on both `create_payment_link` and the `/api/agent/*`
-endpoints, the cap guardrail, webhook signature verification (valid/invalid),
-duplicate/out-of-order webhook safety, and the full upsell flow (no offer before
-payment, correct category/price constraints, explicit confirmation, and that
-`confirm_upsell` can't be steered to a different SKU). `create_payment_link` is
-monkeypatched in every test — no real Razorpay calls happen during the test run.
+`backend/tests/test_backend.py` — 36 tests. Run with:
+```bash
+cd backend
+pytest
+```
+(needs the venv's dependencies installed, including `pytest`).
+
+Covers, roughly in this order:
+- **Human-chat confirmation gate**: rejected with no confirmation, allowed once
+  confirmed, a confirmation for one SKU/quantity can't authorize a different one,
+  single-use (consumed after one payment link), declined confirmations block the
+  purchase, confirmations are scoped per session.
+- **Quantity/amount validation**: zero/negative quantity, over-stock, over-cap (and
+  that it's logged), and that the mocked Razorpay function is never even called for
+  an invalid request.
+- **Agent-to-agent quote gate**: a valid quote allows ordering; missing, unknown,
+  expired, reused, and sku/quantity-modified quotes are all rejected with the
+  documented status codes.
+- **Webhook**: valid signature marks an order paid, invalid signature is rejected
+  (and doesn't touch the order), duplicate events are safely ignored, a
+  failed/expired event can't downgrade an already-paid order.
+- **Upsell flow**: no offer before payment, offer only after payment, offer is a
+  different category/SKU and ≤ ₹1,000, explicit accept/decline required, `confirm_upsell`
+  can't be steered to a different SKU by the caller.
+- **Payment-status reconciliation** (no webhook received): polls Razorpay directly.
+
+`create_payment_link` is monkeypatched in every test — no real Razorpay calls happen
+during the test run.
