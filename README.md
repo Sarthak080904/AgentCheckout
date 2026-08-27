@@ -85,12 +85,20 @@ Flow:
    back out of the notes, and marks that order `paid` (or `failed` on
    expiry/cancellation). Duplicate or out-of-order events are safely ignored — a
    `failed` event can never downgrade an already-`paid` order.
-4. Only once the agent calls `check_order_status` and sees `paid` does it call
+4. **No public URL for the webhook?** `check_order_status` also polls Razorpay
+   directly for the payment link's real status if the order is still `pending`
+   locally — so without ngrok/a tunnel set up, asking the agent "have I paid?"
+   still correctly reconciles a real completed payment instead of staying stuck
+   on `pending` forever. The webhook remains the primary, production-correct
+   path; this is strictly a local-dev fallback (`reconcile_payment_status` in
+   the audit log, distinguishable from webhook-driven `original_payment_completed`
+   entries via its `reason` field).
+5. Only once the order is `paid` (via either path above) does the agent call
    `offer_upsell(order_id)` — a plain Python function (`orders.select_upsell`, no LLM
    call) that deterministically picks one product that's in stock, in a different
    category, not the same SKU, and ≤ ₹1,000 (preferring a thematically related
    category, falling back to cheapest). This offer is stored in `pending_upsells`.
-5. The buyer's explicit yes/no goes through `confirm_upsell(order_id, accept)` — note
+6. The buyer's explicit yes/no goes through `confirm_upsell(order_id, accept)` — note
    there's no `sku_id` field in that tool's schema at all, so the model has no way to
    substitute a different product; it can only accept or decline the exact one already
    stored. Accepting creates a genuinely separate order (`kind='upsell'`,

@@ -56,6 +56,23 @@ def _create_payment_link_once(
     }
 
 
+def fetch_payment_link_status(link_id: str) -> str | None:
+    """
+    Best-effort poll of Razorpay's actual payment link status — a fallback for
+    when no webhook has reached us (e.g. local dev with no public URL/tunnel,
+    so Razorpay has nowhere to deliver the webhook to). The webhook is still
+    the primary, production-correct path; this just closes that local-dev gap
+    inside check_order_status. Returns None on any failure — callers should
+    treat that as "still unknown," not as a failure state.
+    """
+    try:
+        client = get_client()
+        link = client.payment_link.fetch(link_id)
+        return link.get("status")
+    except Exception:
+        return None
+
+
 def create_payment_link(
     *,
     amount_inr: int,

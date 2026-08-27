@@ -21,6 +21,7 @@ TEST_CAP_INR = 2000
 TEST_WEBHOOK_SECRET = "whsec_test_secret"
 
 _fake_link_counter = {"n": 0}
+_fake_remote_status = {"value": None}  # None = default mock behavior below
 
 
 def _fake_create_payment_link(*, amount_inr, description, notes=None, customer_name="AgentCheckout Buyer", max_attempts=2):
@@ -33,6 +34,12 @@ def _fake_create_payment_link(*, amount_inr, description, notes=None, customer_n
     }
 
 
+def _fake_fetch_payment_link_status(link_id: str):
+    # Default: "still pending" (None -> treated as unknown by the caller),
+    # unless a test opts into simulating a specific remote status.
+    return _fake_remote_status["value"]
+
+
 @pytest.fixture(autouse=True)
 def isolated_env(tmp_path, monkeypatch):
     """Fresh SQLite DB per test, fixed cap, fake payment-link creation, no
@@ -42,7 +49,9 @@ def isolated_env(tmp_path, monkeypatch):
     monkeypatch.setattr(main_module, "AGENT_MAX_AUTO_AMOUNT_INR", TEST_CAP_INR)
     monkeypatch.setattr(main_module, "RAZORPAY_WEBHOOK_SECRET", TEST_WEBHOOK_SECRET)
     monkeypatch.setattr(tools_module, "create_payment_link", _fake_create_payment_link)
+    monkeypatch.setattr(tools_module, "fetch_payment_link_status", _fake_fetch_payment_link_status)
     _fake_link_counter["n"] = 0
+    _fake_remote_status["value"] = None
     yield
 
 
@@ -290,3 +299,28 @@ def test_confirm_upsell_ignores_any_sku_supplied_by_caller():
     )
     upsell_order = get_order(result["order_id"])
     assert upsell_order["sku_id"] != "sku-009"
+
+
+# --- reconciliation fallback: no webhook received, poll Razorpay directly ---
+
+
+def test_check_order_status_polls_razorpay_when_no_webhook_received():
+    order_result = tools_module.run_tool("create_payment_link", {"sku_id": "sku-006", "quantity": 1})
+    order_id = order_result["order_id"]
+    assert get_order(order_id)["status"] == "pending"
+
+    _fake_remote_status["value"] = "paid"  # simulate Razorpay reporting paid
+    result = tools_module.run_tool("check_order_status", {"order_id": order_id})
+
+    assert result["status"] == "paid"
+    assert get_order(order_id)["status"] == "paid"
+
+
+def test_check_order_status_leaves_pending_when_remote_is_also_pending():
+    order_result = tools_module.run_tool("create_payment_link", {"sku_id": "sku-006", "quantity": 1})
+    order_id = order_result["order_id"]
+
+    _fake_remote_status["value"] = "created"  # Razorpay's "not yet paid" status
+    result = tools_module.run_tool("check_order_status", {"order_id": order_id})
+
+    assert result["status"] == "pending"

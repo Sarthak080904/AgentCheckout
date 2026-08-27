@@ -1,11 +1,13 @@
 from app.catalog import load_catalog, find_product, validate_quantity
-from app.razorpay_client import create_payment_link, PaymentLinkError
+from app.razorpay_client import create_payment_link, fetch_payment_link_status, PaymentLinkError
 from app.config import AGENT_MAX_AUTO_AMOUNT_INR
 from app.audit import log_action
 from app.orders import (
     generate_order_id,
     create_order,
     get_order,
+    mark_order_paid,
+    mark_order_failed,
     select_upsell,
     create_pending_upsell,
     get_offered_upsell,
@@ -217,6 +219,40 @@ def _check_order_status(tool_input: dict) -> dict:
     order = get_order(tool_input["order_id"])
     if not order:
         return {"error": "not_found"}
+
+    # Fallback reconciliation: if no webhook has updated this order yet, ask
+    # Razorpay directly. Covers local dev/demos with no public URL for
+    # Razorpay to deliver a webhook to — the webhook is still the primary
+    # mechanism and this is skipped once an order is already resolved.
+    if order["status"] == "pending" and order["razorpay_payment_link_id"]:
+        remote_status = fetch_payment_link_status(order["razorpay_payment_link_id"])
+        changed = False
+        if remote_status == "paid":
+            changed = mark_order_paid(order["order_id"])
+            outcome, reason = "original_payment_completed", "Confirmed by polling Razorpay directly (no webhook received)"
+        elif remote_status in ("expired", "cancelled"):
+            changed = mark_order_failed(order["order_id"])
+            outcome, reason = "original_payment_failed", f"Razorpay reports {remote_status} (polled, no webhook received)"
+        else:
+            outcome = reason = None
+
+        if changed:
+            log_action(
+                session_id=order["session_id"],
+                source=order["source"],
+                tool="reconcile_payment_status",
+                tool_input={"order_id": order["order_id"]},
+                result={"remote_status": remote_status},
+                amount_inr=order["amount_inr"],
+                bound_limit_inr=None,
+                within_bound=True,
+                outcome=outcome,
+                order_id=order["order_id"],
+                sku_id=order["sku_id"],
+                reason=reason,
+            )
+            order = get_order(order["order_id"])  # re-read the now-updated row
+
     return {
         "order_id": order["order_id"],
         "status": order["status"],
