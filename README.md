@@ -83,8 +83,13 @@ apologizes, `0` (default) = normal operation.
 
 Every tool call — search, lookup, payment-link creation (allowed or blocked) — is
 logged to SQLite (`backend/data/audit.db`, schema in `backend/data/schema.sql`),
-auto-created on first run. Inspect via `GET /api/audit-log` or
-`sqlite3 backend/data/audit.db "SELECT * FROM agent_actions ORDER BY id DESC LIMIT 10;"`.
+auto-created on first run.
+
+**To see it without running the frontend** (backend only, `uvicorn app.main:app --port 8000`):
+- Paste `http://localhost:8000/api/audit-log` into a browser — raw JSON of every logged action
+- Or open `http://localhost:8000/docs`, expand `GET /api/audit-log`, click "Try it out" —
+  FastAPI's built-in interactive UI, no extra code from us
+- Or, without even the backend running: `sqlite3 backend/data/audit.db "SELECT * FROM agent_actions ORDER BY id DESC LIMIT 10;"`
 
 ## What broke / build log
 
