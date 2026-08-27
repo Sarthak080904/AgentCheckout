@@ -143,3 +143,10 @@ actually needs to do inside an 11-day build, it was the right call.
   mention explicitly non-negotiable regardless of what else happens in the same
   turn, and telling the model to skip a failed upsell search silently instead of
   narrating it.
+- The model sometimes wrapped a payment link in markdown bold (`**url**`). Since
+  the chat renders plain text, the literal `**` characters got swept into the URL
+  match itself, corrupting the actual link (e.g. `...crzn**` — a broken slug that
+  led to an empty/error page). Fixed both ends: told the system prompt to never
+  use markdown (plain text only, bare URLs), and hardened `renderWithLinks()` to
+  strip trailing markdown/punctuation from the `href` even if the model slips up
+  again, while still showing that trailing text so nothing visually disappears.

@@ -8,19 +8,26 @@ type DisplayMessage = { role: "user" | "assistant"; text: string };
 
 const SPLIT_URL_RE = /(https?:\/\/[^\s]+)/g;
 const IS_URL_RE = /^https?:\/\//; // non-global: safe to reuse, no lastIndex state
+// Trailing markdown/sentence punctuation that isn't part of the URL itself
+// (e.g. the model wrapping a link in **bold**, or a trailing period).
+const TRAILING_JUNK_RE = /[*_)\]},.:;!?'"]+$/;
 
 // Chat replies are plain strings, so a payment link is just text unless we
 // find and wrap URLs as real <a> tags ourselves.
 function renderWithLinks(text: string) {
-  return text.split(SPLIT_URL_RE).map((part, i) =>
-    IS_URL_RE.test(part) ? (
-      <a key={i} href={part} target="_blank" rel="noopener noreferrer" className="underline">
-        {part}
-      </a>
-    ) : (
-      <span key={i}>{part}</span>
-    )
-  );
+  return text.split(SPLIT_URL_RE).map((part, i) => {
+    if (!IS_URL_RE.test(part)) return <span key={i}>{part}</span>;
+    const junk = part.match(TRAILING_JUNK_RE)?.[0] ?? "";
+    const url = junk ? part.slice(0, -junk.length) : part;
+    return (
+      <span key={i}>
+        <a href={url} target="_blank" rel="noopener noreferrer" className="underline">
+          {url}
+        </a>
+        {junk}
+      </span>
+    );
+  });
 }
 
 export default function ChatPanel({ onActivity }: { onActivity?: () => void }) {
