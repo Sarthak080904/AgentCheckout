@@ -91,6 +91,26 @@ auto-created on first run.
   FastAPI's built-in interactive UI, no extra code from us
 - Or, without even the backend running: `sqlite3 backend/data/audit.db "SELECT * FROM agent_actions ORDER BY id DESC LIMIT 10;"`
 
+**Why SQLite and not Supabase for this.** I considered Supabase early on, since it's
+Postgres-as-a-service and would've given me a hosted DB with zero server ops. But the
+audit log only needs one thing: a single backend process appending rows and reading
+them back. There's no second service writing to it, no multi-user access, no need for
+real-time sync across clients — so a hosted, networked Postgres instance would be
+solving a problem I don't have here.
+
+What it would cost me: anyone running this repo — a judge included — would first need
+to create their own Supabase project and paste in credentials before the app even
+starts, or I'd have to ship my own project's credentials in the repo, which isn't
+something I'm willing to do. SQLite is just a file. It's created automatically the
+first time the backend runs, no signup, no network call, no `.env` value to chase down
+just to see the audit trail. For a judge cloning this cold, that's the difference
+between "clone and run" and "clone, sign up somewhere, configure, then run."
+
+If this were going into production with multiple services or people hitting the
+audit log concurrently, I'd revisit this — that's a real limitation of SQLite I'm
+aware of, not something I'm pretending isn't there. But for what this component
+actually needs to do inside an 11-day build, it was the right call.
+
 ## What broke / build log
 
 - `pip install` initially hit the global Python environment and conflicted with
@@ -114,24 +134,12 @@ auto-created on first run.
   ("virtualization support not detected" — disabled at the BIOS level on the dev
   machine). Dropped Docker rather than ship an unverified config under time
   pressure; the manual setup above is fully tested.
-
-
-**Why SQLite and not Supabase for this.** I considered Supabase early on, since it's
-Postgres-as-a-service and would've given me a hosted DB with zero server ops. But the
-audit log only needs one thing: a single backend process appending rows and reading
-them back. There's no second service writing to it, no multi-user access, no need for
-real-time sync across clients — so a hosted, networked Postgres instance would be
-solving a problem I don't have here.
-
-What it would cost me: anyone running this repo — a judge included — would first need
-to create their own Supabase project and paste in credentials before the app even
-starts, or I'd have to ship my own project's credentials in the repo, which isn't
-something I'm willing to do. SQLite is just a file. It's created automatically the
-first time the backend runs, no signup, no network call, no `.env` value to chase down
-just to see the audit trail. For a judge cloning this cold, that's the difference
-between "clone and run" and "clone, sign up somewhere, configure, then run."
-
-If this were going into production with multiple services or people hitting the
-audit log concurrently, I'd revisit this — that's a real limitation of SQLite I'm
-aware of, not something I'm pretending isn't there. But for what this component
-actually needs to do inside an 11-day build, it was the right call.
+- After adding the upsell nudge, the agent sometimes dropped the payment link
+  from its reply entirely when it also did the upsell search in the same turn
+  (e.g. buy a mouse → link created → agent checks for a mouse pad, finds none →
+  final reply only said "skipping the add-on," never mentioning the link that
+  was actually created). The system prompt's upsell instruction was competing
+  with "always mention the link" and winning. Fixed by making the payment-link
+  mention explicitly non-negotiable regardless of what else happens in the same
+  turn, and telling the model to skip a failed upsell search silently instead of
+  narrating it.
