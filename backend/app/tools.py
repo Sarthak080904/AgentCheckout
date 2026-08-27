@@ -289,7 +289,16 @@ def _create_payment_link(tool_input: dict, *, session_id: str | None, source: st
             "message": "This confirmation has already been used to create a payment link.",
         }
 
-    return create_order_and_link(sku_id=sku_id, quantity=quantity, session_id=session_id, source=source, kind="original")
+    result = create_order_and_link(sku_id=sku_id, quantity=quantity, session_id=session_id, source=source, kind="original")
+
+    if "payment_link" not in result:
+        # Nothing was actually created (e.g. a transient Razorpay failure) —
+        # "single-use" means invalidated once a link is created, not burned on
+        # a failed attempt. Restore it so the buyer can retry without
+        # re-confirming from scratch.
+        resolve_confirmation(pending["id"], "confirmed")
+
+    return result
 
 
 def _request_purchase_confirmation(tool_input: dict, *, session_id: str | None) -> dict:

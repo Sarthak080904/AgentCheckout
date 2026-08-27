@@ -309,6 +309,21 @@ actually needs to do inside an 11-day build, it was the right call.
   before saying anything, and use its returned amount as the one and only
   confirmation question. Verified live — collapsed back to a single confirmation
   round-trip.
+- The same live test then surfaced a real bug: `create_payment_link` consumed the
+  buyer's confirmation *before* attempting the Razorpay call, so when a genuine
+  transient Razorpay failure hit, the confirmation was already burned — the buyer
+  would've had to reconfirm from scratch even though nothing was actually created.
+  Fixed by only consuming the confirmation after `create_order_and_link` actually
+  succeeds; on failure it's restored to `confirmed` so the same confirmation can
+  be retried. Added a regression test
+  (`test_confirmation_survives_a_failed_payment_link_attempt`).
+- While retesting that fix live, hit two real Razorpay failures in a row —
+  diagnosed directly against the API and found the actual cause: Razorpay's
+  test-mode account has a hard cap ("test mode limit of 30 reached for
+  payment_link"), exhausted by testing throughout the build. Not a code bug —
+  flagging here since it'll affect anyone recording a demo after heavy testing;
+  check the Razorpay dashboard for clearing old test links, or whether the
+  account's limit resets on a schedule, before recording.
 
 ## Tests
 

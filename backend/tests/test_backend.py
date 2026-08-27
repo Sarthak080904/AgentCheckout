@@ -21,6 +21,7 @@ from app import tools as tools_module
 from app.db import connect
 from app.main import app
 from app.orders import get_offered_upsell, get_order, mark_order_paid
+from app.razorpay_client import PaymentLinkError
 
 TEST_CAP_INR = 2000
 TEST_WEBHOOK_SECRET = "whsec_test_secret"
@@ -176,6 +177,27 @@ def test_confirmation_scoped_per_session():
 
     result = tools_module.run_tool("create_payment_link", {"sku_id": "sku-006", "quantity": 1}, session_id="sess-B")
     assert result.get("error") == "confirmation_required"
+
+
+def test_confirmation_survives_a_failed_payment_link_attempt(monkeypatch):
+    """A transient Razorpay failure must not burn the buyer's confirmation —
+    'single-use' means invalidated once a link is actually created, not on a
+    failed attempt. Found via a live test where a genuine transient Razorpay
+    error left the buyer stuck needing to re-confirm from scratch."""
+    _request_confirmation("sku-006", 1, "sess-1")
+    _confirm("sku-006", 1, True, "sess-1")
+
+    def _always_fails(**kwargs):
+        raise PaymentLinkError("simulated transient failure")
+
+    monkeypatch.setattr(tools_module, "create_payment_link", _always_fails)
+    failed = tools_module.run_tool("create_payment_link", {"sku_id": "sku-006", "quantity": 1}, session_id="sess-1")
+    assert failed.get("error") == "payment_provider_unavailable"
+
+    # Same confirmation, no re-confirm — now let the (test-wide) fake succeed.
+    monkeypatch.setattr(tools_module, "create_payment_link", _fake_create_payment_link)
+    retried = tools_module.run_tool("create_payment_link", {"sku_id": "sku-006", "quantity": 1}, session_id="sess-1")
+    assert "payment_link" in retried
 
 
 # --- Section 3: quantity / amount validation (backend-level, chat path) -----
