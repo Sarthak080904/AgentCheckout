@@ -56,28 +56,36 @@ export default function AuditLogPanel({ refreshSignal }: { refreshSignal?: numbe
   }, [refreshSignal, fetchLog]);
 
   return (
-    <div className="flex h-[600px] flex-col rounded border border-slate-200 bg-white">
-      <div className="border-b border-slate-200 px-4 py-3">
-        <div className="font-medium">Agent audit log</div>
-        <div className="text-xs text-slate-500">
-          every tool call, bounded &amp; gated — refreshes automatically
+    <div className="flex h-[600px] flex-col rounded-xl border border-slate-200 bg-white shadow-sm">
+      <div className="flex items-center gap-2 border-b border-slate-200 px-4 py-3">
+        <span className="h-2 w-2 animate-pulse rounded-full bg-sky-500" />
+        <div>
+          <div className="font-medium">Agent audit log</div>
+          <div className="text-xs text-slate-400">
+            every tool call, bounded &amp; gated — refreshes every 2.5s
+          </div>
         </div>
       </div>
 
       <div className="flex-1 space-y-2 overflow-y-auto p-3">
-        {error && <div className="rounded bg-amber-50 p-2 text-xs text-amber-800">{error}</div>}
+        {error && <div className="rounded-lg bg-amber-50 p-2 text-xs text-amber-800">{error}</div>}
         {rows.length === 0 && !error && (
           <div className="p-2 text-xs text-slate-400">No agent actions yet — send a chat message.</div>
         )}
         {rows.map((r) => (
-          <div key={r.id} className="rounded border border-slate-200 p-2 text-xs">
+          <div
+            key={r.id}
+            className="rounded-lg border border-slate-200 p-2.5 text-xs transition hover:border-slate-300 hover:shadow-sm"
+          >
             <div className="mb-1 flex items-center justify-between gap-2">
               <span className="font-mono font-medium">{r.tool}</span>
-              <span className={`rounded px-1.5 py-0.5 ${SOURCE_STYLE[r.source] || "bg-slate-50 text-slate-600"}`}>
+              <span
+                className={`rounded-full px-2 py-0.5 font-medium ${SOURCE_STYLE[r.source] || "bg-slate-50 text-slate-600"}`}
+              >
                 {r.source}
               </span>
             </div>
-            <div className={`mb-1 inline-block rounded border px-1.5 py-0.5 ${OUTCOME_STYLE[r.outcome] || ""}`}>
+            <div className={`mb-1 inline-block rounded-full border px-2 py-0.5 ${OUTCOME_STYLE[r.outcome] || ""}`}>
               {r.outcome}
               {r.amount_inr != null && ` · ₹${r.amount_inr}`}
               {r.bound_limit_inr != null && ` / cap ₹${r.bound_limit_inr}`}

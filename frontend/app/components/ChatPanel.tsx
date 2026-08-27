@@ -83,32 +83,53 @@ export default function ChatPanel({ onActivity }: { onActivity?: () => void }) {
   }
 
   return (
-    <div className="flex h-[600px] flex-col rounded border border-slate-200 bg-white">
-      <div className="border-b border-slate-200 px-4 py-3">
-        <div className="font-medium">Shopping assistant</div>
-        <div className="text-xs text-slate-500">session {sessionId.slice(0, 8)}</div>
+    <div className="flex h-[600px] flex-col rounded-xl border border-slate-200 bg-white shadow-sm">
+      <div className="flex items-center gap-2 border-b border-slate-200 px-4 py-3">
+        <span className="h-2 w-2 rounded-full bg-emerald-500" />
+        <div>
+          <div className="font-medium">Shopping assistant</div>
+          <div className="text-xs text-slate-400">session {sessionId.slice(0, 8)}</div>
+        </div>
       </div>
 
       <div ref={messageListRef} className="flex-1 space-y-3 overflow-y-auto p-4">
         {displayMessages.map((m, i) => (
-          <div key={i} className={m.role === "user" ? "text-right" : "text-left"}>
+          <div key={i} className={"flex items-end gap-2 " + (m.role === "user" ? "justify-end" : "justify-start")}>
+            {m.role === "assistant" && (
+              <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-slate-900 text-xs font-medium text-white">
+                AI
+              </div>
+            )}
             <span
               className={
-                "inline-block max-w-[85%] whitespace-pre-wrap rounded-lg px-3 py-2 text-sm " +
-                (m.role === "user" ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-900")
+                "inline-block max-w-[80%] whitespace-pre-wrap rounded-2xl px-3 py-2 text-sm " +
+                (m.role === "user"
+                  ? "rounded-br-sm bg-slate-900 text-white"
+                  : "rounded-bl-sm bg-slate-100 text-slate-900")
               }
             >
               {renderWithLinks(m.text)}
             </span>
           </div>
         ))}
-        {loading && <div className="text-left text-sm text-slate-400">Thinking…</div>}
-        {error && <div className="rounded bg-red-50 p-2 text-sm text-red-700">{error}</div>}
+        {loading && (
+          <div className="flex items-end gap-2">
+            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-slate-900 text-xs font-medium text-white">
+              AI
+            </div>
+            <span className="inline-flex items-center gap-1 rounded-2xl rounded-bl-sm bg-slate-100 px-3 py-2.5">
+              <span className="typing-dot h-1.5 w-1.5 rounded-full bg-slate-400" />
+              <span className="typing-dot h-1.5 w-1.5 rounded-full bg-slate-400" />
+              <span className="typing-dot h-1.5 w-1.5 rounded-full bg-slate-400" />
+            </span>
+          </div>
+        )}
+        {error && <div className="rounded-lg bg-red-50 p-2 text-sm text-red-700">{error}</div>}
       </div>
 
       <div className="flex gap-2 border-t border-slate-200 p-3">
         <input
-          className="flex-1 rounded border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-500"
+          className="flex-1 rounded-full border border-slate-300 px-4 py-2 text-sm outline-none focus:border-slate-500"
           placeholder="e.g. I need a running shoe under 3000 rupees"
           value={input}
           onChange={(e) => setInput(e.target.value)}
@@ -124,8 +145,8 @@ export default function ChatPanel({ onActivity }: { onActivity?: () => void }) {
           onClick={send}
           aria-disabled={loading || !input.trim()}
           className={
-            "rounded bg-slate-900 px-4 py-2 text-sm text-white " +
-            (loading || !input.trim() ? "pointer-events-none opacity-40" : "")
+            "rounded-full bg-slate-900 px-4 py-2 text-sm font-medium text-white transition " +
+            (loading || !input.trim() ? "pointer-events-none opacity-40" : "hover:bg-slate-700")
           }
         >
           Send
