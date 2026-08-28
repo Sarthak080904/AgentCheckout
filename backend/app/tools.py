@@ -137,12 +137,22 @@ TOOL_SCHEMAS = [
 
 
 def _search_catalog(tool_input: dict) -> dict:
-    query = tool_input.get("query", "").lower()
+    query = tool_input.get("query", "").lower().strip()
     max_price = tool_input.get("max_price_inr")
+
+    # Plain substring match misses simple pluralization (e.g. "shoes" isn't a
+    # substring of catalog text that says "Running Shoe"). Try both the plural
+    # and singular form of a trailing "s" rather than requiring an exact match.
+    query_variants = {query}
+    if query.endswith("s") and len(query) > 1:
+        query_variants.add(query[:-1])
+    elif query:
+        query_variants.add(query + "s")
+
     results = []
     for p in load_catalog():
         haystack = f"{p['name']} {p['description']} {p['category']}".lower()
-        if query and query not in haystack:
+        if query and not any(variant in haystack for variant in query_variants):
             continue
         if max_price is not None and p["price_inr"] > max_price:
             continue

@@ -331,10 +331,15 @@ actually needs to do inside an 11-day build, it was the right call.
   it accepted once a link is actually created; on failure it stays "offered" so
   accepting again can retry without re-rolling a new upsell. Added
   `test_upsell_offer_survives_a_failed_payment_link_attempt` (38 tests now).
+- `search_catalog` matched with plain substring containment, so searching
+  "shoes" found nothing against catalog text that says "Running **Shoe**"
+  (singular) — a real user-reported bug. Fixed by also trying the query with
+  a trailing "s" added/stripped, so plural and singular forms both match.
+  Added `test_search_matches_plural_and_singular_query` (39 tests now).
 
 ## Tests
 
-`backend/tests/test_backend.py` — 38 tests. Run with:
+`backend/tests/test_backend.py` — 39 tests. Run with:
 ```bash
 cd backend
 pytest

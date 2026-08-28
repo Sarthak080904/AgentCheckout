@@ -242,6 +242,16 @@ def test_no_invalid_amount_ever_sent_to_razorpay():
     assert all(amount > 0 for amount in _fake_link_calls)  # and every real call so far was positive
 
 
+def test_search_matches_plural_and_singular_query():
+    """'shoes' must match catalog text that says 'Running Shoe' (singular) and
+    vice versa — plain substring matching missed this in production."""
+    plural = tools_module.run_tool("search_catalog", {"query": "shoes"})
+    singular = tools_module.run_tool("search_catalog", {"query": "shoe"})
+    assert plural["count"] > 0
+    assert plural["count"] == singular["count"]
+
+
+
 def test_agent_quote_rejects_zero_quantity(client):
     res = client.post("/api/agent/quote", json={"sku_id": "sku-006", "quantity": 0})
     assert res.status_code == 400
