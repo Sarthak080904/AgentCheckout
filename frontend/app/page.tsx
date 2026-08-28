@@ -28,24 +28,24 @@ export default async function Home() {
   return (
     <main className="mx-auto max-w-6xl p-8">
       <div className="mb-8 flex items-center gap-3">
-        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-900 text-lg font-semibold text-white">
+        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary text-lg font-semibold text-primary-foreground">
           A
         </div>
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">AgentCheckout</h1>
-          <span className="inline-block rounded-full bg-slate-900/5 px-2 py-0.5 text-xs font-medium text-slate-600">
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground">AgentCheckout</h1>
+          <span className="inline-block rounded-full bg-secondary/30 px-2 py-0.5 text-xs font-medium text-foreground/70">
             Track 1 — AI Growth &amp; Agentic Commerce
           </span>
         </div>
       </div>
-      <p className="mb-6 max-w-3xl text-slate-500">
+      <p className="mb-6 max-w-3xl text-muted-foreground">
         Chat with the shopping agent on the left; every action it takes — allowed or blocked
         by the guardrail — shows up live on the right.
       </p>
 
       <AgentWorkspace />
 
-      <h2 className="mb-3 mt-10 text-lg font-medium">Storefront (reference)</h2>
+      <h2 className="mb-3 mt-10 text-lg font-medium text-foreground">Storefront (reference)</h2>
       {products.length === 0 ? (
         <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-800">
           No products loaded. Start the backend (<code>uvicorn app.main:app --reload</code> in{" "}
@@ -56,7 +56,7 @@ export default async function Home() {
           {products.map((p) => (
             <li
               key={p.id}
-              className="group overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+              className="group overflow-hidden rounded-xl border border-border bg-card shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
             >
               {p.image_url && (
                 // eslint-disable-next-line @next/next/no-img-element
@@ -67,11 +67,11 @@ export default async function Home() {
                 />
               )}
               <div className="p-4">
-                <div className="font-medium">{p.name}</div>
-                <div className="mt-1 text-sm text-slate-500">{p.description}</div>
+                <div className="font-medium text-card-foreground">{p.name}</div>
+                <div className="mt-1 text-sm text-muted-foreground">{p.description}</div>
                 <div className="mt-3 flex items-center justify-between">
-                  <span className="font-semibold text-slate-900">₹{p.price_inr}</span>
-                  <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-500">
+                  <span className="font-semibold text-card-foreground">₹{p.price_inr}</span>
+                  <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
                     {p.stock} in stock
                   </span>
                 </div>

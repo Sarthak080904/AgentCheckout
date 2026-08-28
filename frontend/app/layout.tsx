@@ -1,4 +1,7 @@
+import { Inter } from "next/font/google";
 import "./globals.css";
+
+const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 
 export const metadata = {
   title: "AgentCheckout",
@@ -7,8 +10,8 @@ export const metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
-      <body className="min-h-screen bg-gradient-to-b from-slate-50 to-slate-100 text-slate-900 antialiased">
+    <html lang="en" className={inter.variable}>
+      <body className="min-h-screen bg-background font-sans text-foreground antialiased">
         {children}
       </body>
     </html>

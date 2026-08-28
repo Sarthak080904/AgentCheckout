@@ -45,8 +45,8 @@ const OUTCOME_STYLE: Record<string, string> = {
 };
 
 const SOURCE_STYLE: Record<string, string> = {
-  "human-chat": "bg-indigo-50 text-indigo-700",
-  "agent-to-agent": "bg-purple-50 text-purple-700",
+  "human-chat": "bg-primary/10 text-primary",
+  "agent-to-agent": "bg-accent/10 text-accent",
 };
 
 export default function AuditLogPanel({ refreshSignal }: { refreshSignal?: number }) {
@@ -75,12 +75,12 @@ export default function AuditLogPanel({ refreshSignal }: { refreshSignal?: numbe
   }, [refreshSignal, fetchLog]);
 
   return (
-    <div className="flex h-[600px] flex-col rounded-xl border border-slate-200 bg-white shadow-sm">
-      <div className="flex items-center gap-2 border-b border-slate-200 px-4 py-3">
-        <span className="h-2 w-2 animate-pulse rounded-full bg-sky-500" />
+    <div className="flex h-[600px] flex-col rounded-xl border border-border bg-card shadow-sm">
+      <div className="flex items-center gap-2 border-b border-border px-4 py-3">
+        <span className="h-2 w-2 animate-pulse rounded-full bg-accent" />
         <div>
-          <div className="font-medium">Agent audit log</div>
-          <div className="text-xs text-slate-400">
+          <div className="font-medium text-card-foreground">Agent audit log</div>
+          <div className="text-xs text-muted-foreground">
             every tool call, bounded &amp; gated — refreshes every 2.5s
           </div>
         </div>
@@ -89,17 +89,17 @@ export default function AuditLogPanel({ refreshSignal }: { refreshSignal?: numbe
       <div className="flex-1 space-y-2 overflow-y-auto p-3">
         {error && <div className="rounded-lg bg-amber-50 p-2 text-xs text-amber-800">{error}</div>}
         {rows.length === 0 && !error && (
-          <div className="p-2 text-xs text-slate-400">No agent actions yet — send a chat message.</div>
+          <div className="p-2 text-xs text-muted-foreground">No agent actions yet — send a chat message.</div>
         )}
         {rows.map((r) => (
           <div
             key={r.id}
-            className="rounded-lg border border-slate-200 p-2.5 text-xs transition hover:border-slate-300 hover:shadow-sm"
+            className="rounded-lg border border-border p-2.5 text-xs transition hover:border-secondary hover:shadow-sm"
           >
             <div className="mb-1 flex items-center justify-between gap-2">
-              <span className="font-mono font-medium">{r.tool}</span>
+              <span className="font-mono font-medium text-card-foreground">{r.tool}</span>
               <span
-                className={`rounded-full px-2 py-0.5 font-medium ${SOURCE_STYLE[r.source] || "bg-slate-50 text-slate-600"}`}
+                className={`rounded-full px-2 py-0.5 font-medium ${SOURCE_STYLE[r.source] || "bg-muted text-muted-foreground"}`}
               >
                 {r.source}
               </span>
@@ -110,11 +110,11 @@ export default function AuditLogPanel({ refreshSignal }: { refreshSignal?: numbe
               {r.bound_limit_inr != null && ` / cap ₹${r.bound_limit_inr}`}
             </div>
             {r.order_id && (
-              <div className="mb-1 truncate font-mono text-[10px] text-slate-400">{r.order_id}</div>
+              <div className="mb-1 truncate font-mono text-[10px] text-muted-foreground">{r.order_id}</div>
             )}
-            <div className="truncate text-slate-500">{r.input}</div>
-            {r.reason && <div className="mt-0.5 truncate text-slate-400">{r.reason}</div>}
-            <div className="mt-1 text-[10px] text-slate-400">
+            <div className="truncate text-muted-foreground">{r.input}</div>
+            {r.reason && <div className="mt-0.5 truncate text-muted-foreground">{r.reason}</div>}
+            <div className="mt-1 text-[10px] text-muted-foreground">
               {new Date(r.timestamp * 1000).toLocaleTimeString()}
             </div>
           </div>
