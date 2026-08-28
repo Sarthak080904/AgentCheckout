@@ -28,11 +28,12 @@ export default async function Home() {
   return (
     <main className="mx-auto max-w-6xl p-8">
       <div className="mb-8 flex items-center gap-3">
-        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary text-lg font-semibold text-primary-foreground">
+        <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary text-lg font-semibold text-primary-foreground">
           A
         </div>
         <div>
           <h1 className="text-2xl font-semibold tracking-tight text-foreground">AgentCheckout</h1>
+          <h3>Trusted AI commerce for humans and agents</h3>
           <span className="inline-block rounded-full bg-secondary/30 px-2 py-0.5 text-xs font-medium text-foreground/70">
             Track 1 — AI Growth &amp; Agentic Commerce
           </span>

@@ -482,6 +482,29 @@ def test_confirm_upsell_ignores_any_sku_supplied_by_caller():
     assert upsell_order["sku_id"] != "sku-009"
 
 
+def test_upsell_offer_survives_a_failed_payment_link_attempt(monkeypatch):
+    """Same principle as the purchase-confirmation gate: a transient Razorpay
+    failure while creating the upsell's payment link must not burn the offer —
+    found live while testing against an exhausted Razorpay test-mode quota."""
+    order_id = _create_and_pay("sku-003")
+    offer = tools_module.run_tool("offer_upsell", {"order_id": order_id})["offer"]
+
+    def _always_fails(**kwargs):
+        raise PaymentLinkError("simulated transient failure")
+
+    monkeypatch.setattr(tools_module, "create_payment_link", _always_fails)
+    failed = tools_module.run_tool("confirm_upsell", {"order_id": order_id, "accept": True})
+    assert "payment_link" not in failed
+
+    pending = get_offered_upsell(order_id)
+    assert pending is not None and pending["status"] == "offered"  # not burned
+
+    monkeypatch.setattr(tools_module, "create_payment_link", _fake_create_payment_link)
+    retried = tools_module.run_tool("confirm_upsell", {"order_id": order_id, "accept": True})
+    assert "payment_link" in retried
+    assert retried["upsell_sku_id"] == offer["id"]
+
+
 # --- reconciliation fallback: no webhook received, poll Razorpay directly ---
 
 

@@ -464,7 +464,12 @@ def _confirm_upsell(tool_input: dict, *, session_id: str | None, source: str) ->
         kind="upsell",
         parent_order_id=order_id,
     )
-    resolve_pending_upsell(pending["id"], "accepted")
+    # Only mark the offer "accepted" if a link was actually created — same
+    # principle as the purchase-confirmation gate: a failed Razorpay attempt
+    # (e.g. a transient outage) must not burn the offer. Left as "offered" on
+    # failure so accepting again can retry without re-rolling a new upsell.
+    if "payment_link" in result:
+        resolve_pending_upsell(pending["id"], "accepted")
     result["upsell_sku_id"] = pending["sku_id"]
     result["source_order_id"] = order_id
     return result

@@ -324,10 +324,17 @@ actually needs to do inside an 11-day build, it was the right call.
   flagging here since it'll affect anyone recording a demo after heavy testing;
   check the Razorpay dashboard for clearing old test links, or whether the
   account's limit resets on a schedule, before recording.
+- With the quota exhausted, live-testing the upsell flow surfaced the exact same
+  class of bug in a second place: `confirm_upsell` also marked the pending
+  upsell "accepted" unconditionally, even when the Razorpay call for its
+  payment link failed. Same fix as the purchase-confirmation gate — only mark
+  it accepted once a link is actually created; on failure it stays "offered" so
+  accepting again can retry without re-rolling a new upsell. Added
+  `test_upsell_offer_survives_a_failed_payment_link_attempt` (38 tests now).
 
 ## Tests
 
-`backend/tests/test_backend.py` — 36 tests. Run with:
+`backend/tests/test_backend.py` — 38 tests. Run with:
 ```bash
 cd backend
 pytest
