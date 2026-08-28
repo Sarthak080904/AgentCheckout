@@ -13,9 +13,7 @@ from app.db import connect
 
 MAX_UPSELL_PRICE_INR = 1000
 
-# Preferred upsell categories per original-purchase category, checked in order.
-# Falls back to the cheapest eligible candidate if none of these match —
-# still deterministic, just less thematically tailored.
+# Preferred complementary categories; selection falls back to the cheapest match.
 _UPSELL_AFFINITY: dict[str, list[str]] = {
     "footwear": ["apparel", "fitness"],
     "electronics": ["bags", "home"],
@@ -168,7 +166,7 @@ def resolve_pending_upsell(pending_id: int, status: str) -> None:
     conn.close()
 
 
-# --- Human-chat purchase confirmation gate ----------------------------------
+# Human-chat purchase confirmation state.
 
 
 def create_pending_confirmation(

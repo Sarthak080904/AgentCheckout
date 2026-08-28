@@ -8,14 +8,21 @@ type DisplayMessage = { role: "user" | "assistant"; text: string };
 
 const SPLIT_URL_RE = /(https?:\/\/[^\s]+)/g;
 const IS_URL_RE = /^https?:\/\//; // non-global: safe to reuse, no lastIndex state
-// Trailing markdown/sentence punctuation that isn't part of the URL itself
-// (e.g. the model wrapping a link in **bold**, or a trailing period).
+// Prevent markdown or sentence punctuation from corrupting payment-link URLs.
 const TRAILING_JUNK_RE = /[*_)\]},.:;!?'"]+$/;
 
-// Chat replies are plain strings, so a payment link is just text unless we
-// find and wrap URLs as real <a> tags ourselves.
+// SKU IDs are useful for backend/audit correlation but are not customer-facing
+// product details. Keep a UI-side safeguard in case the model includes one.
+function hideInternalSku(text: string) {
+  return text
+    .replace(/\s*\(sku-[a-z0-9-]+\)/gi, "")
+    .replace(/\bsku-[a-z0-9-]+\b/gi, "")
+    .replace(/[ \t]{2,}/g, " ");
+}
+
+// Convert payment-link URLs in plain-text replies into clickable links.
 function renderWithLinks(text: string) {
-  return text.split(SPLIT_URL_RE).map((part, i) => {
+  return hideInternalSku(text).split(SPLIT_URL_RE).map((part, i) => {
     if (!IS_URL_RE.test(part)) return <span key={i}>{part}</span>;
     const junk = part.match(TRAILING_JUNK_RE)?.[0] ?? "";
     const url = junk ? part.slice(0, -junk.length) : part;
@@ -31,9 +38,7 @@ function renderWithLinks(text: string) {
 }
 
 export default function ChatPanel({ onActivity }: { onActivity?: () => void }) {
-  // Generated client-side only, in an effect: doing this in useState's
-  // initializer runs it once during SSR and again on client hydration,
-  // producing two different UUIDs and a hydration mismatch.
+  // Generate the session ID client-side to avoid SSR hydration mismatches.
   const [sessionId, setSessionId] = useState("");
   useEffect(() => {
     setSessionId(crypto.randomUUID());
@@ -49,9 +54,7 @@ export default function ChatPanel({ onActivity }: { onActivity?: () => void }) {
   const sendingRef = useRef(false); // guards double-submit without disabling focused elements
 
   useEffect(() => {
-    // Scroll only this panel's own message list, not scrollIntoView() on a
-    // marker div — that scrolls every scrollable ancestor into view,
-    // including the whole page, which was yanking the window down on send.
+    // Keep the page position fixed while scrolling the chat list.
     const el = messageListRef.current;
     if (el) el.scrollTop = el.scrollHeight;
   }, [displayMessages, loading]);

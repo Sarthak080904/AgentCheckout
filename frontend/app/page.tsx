@@ -62,7 +62,7 @@ export default async function Home() {
               {p.image_url && (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
-                  src={p.image_url}
+                  src={p.image_url.startsWith("http") ? p.image_url : `${API_URL}${p.image_url}`}
                   alt={p.name}
                   className="h-40 w-full object-cover transition group-hover:scale-105"
                 />

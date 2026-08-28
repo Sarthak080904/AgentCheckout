@@ -140,9 +140,7 @@ def _search_catalog(tool_input: dict) -> dict:
     query = tool_input.get("query", "").lower().strip()
     max_price = tool_input.get("max_price_inr")
 
-    # Plain substring match misses simple pluralization (e.g. "shoes" isn't a
-    # substring of catalog text that says "Running Shoe"). Try both the plural
-    # and singular form of a trailing "s" rather than requiring an exact match.
+    # Accept simple singular/plural forms in catalog searches.
     query_variants = {query}
     if query.endswith("s") and len(query) > 1:
         query_variants.add(query[:-1])
@@ -199,10 +197,7 @@ def create_order_and_link(
 
     total = product["price_inr"] * quantity
 
-    # Guardrail: never create a payment link above the configured cap,
-    # regardless of which gate let the request through. Never send a
-    # zero/negative amount to Razorpay either (quantity>=1 and price>0 in the
-    # catalog already guarantee total > 0, but the check is cheap insurance).
+    # Enforce the cap and reject invalid amounts before contacting Razorpay.
     if total <= 0 or total > AGENT_MAX_AUTO_AMOUNT_INR:
         return {
             "error": "amount_exceeds_auto_limit",
@@ -223,10 +218,7 @@ def create_order_and_link(
             notes={"order_id": order_id},
         )
     except PaymentLinkError as e:
-        # Genuine runtime failure (network/API), not a policy refusal — this
-        # is the "one failure handled gracefully" case: caught here instead
-        # of the request 500ing. No order row is created since no payment
-        # link actually exists to track.
+        # Return a retryable provider error without creating an orphan order.
         return {
             "error": "payment_provider_unavailable",
             "detail": str(e),
@@ -266,11 +258,7 @@ def _create_payment_link(tool_input: dict, *, session_id: str | None, source: st
     sku_id = tool_input["sku_id"]
     quantity = tool_input.get("quantity", 1)
 
-    # Backend confirmation gate — the ONLY thing that can prove the buyer
-    # actually approved this exact product/quantity, independent of whatever
-    # the model claims happened in the conversation. This tool is only ever
-    # reached from the human-chat loop (agent-to-agent uses the quote-token
-    # gate in main.py instead, which calls create_order_and_link directly).
+    # Human-chat orders require a matching, server-stored confirmation.
     if not session_id:
         return {"error": "session_required", "within_bound": True, "amount_inr": None}
 
@@ -290,8 +278,7 @@ def _create_payment_link(tool_input: dict, *, session_id: str | None, source: st
             "message": "The confirmed purchase doesn't match this request — a new confirmation is required.",
         }
     if not consume_confirmation(pending["id"]):
-        # Single-use: someone already consumed this exact confirmation
-        # (e.g. a duplicate/retried tool call) — refuse rather than double-charge.
+        # A confirmation authorizes one payment link only.
         return {
             "error": "confirmation_already_consumed",
             "within_bound": True,
@@ -302,10 +289,7 @@ def _create_payment_link(tool_input: dict, *, session_id: str | None, source: st
     result = create_order_and_link(sku_id=sku_id, quantity=quantity, session_id=session_id, source=source, kind="original")
 
     if "payment_link" not in result:
-        # Nothing was actually created (e.g. a transient Razorpay failure) —
-        # "single-use" means invalidated once a link is created, not burned on
-        # a failed attempt. Restore it so the buyer can retry without
-        # re-confirming from scratch.
+        # Preserve the confirmation when no link was created so the buyer can retry.
         resolve_confirmation(pending["id"], "confirmed")
 
     return result
@@ -351,8 +335,7 @@ def _confirm_purchase(tool_input: dict, *, session_id: str | None) -> dict:
         return {"error": "no_pending_confirmation"}
 
     if pending["sku_id"] != sku_id or pending["quantity"] != quantity:
-        # Whatever was pending doesn't match what's being confirmed — reject
-        # it outright rather than silently confirming the wrong thing.
+        # Never confirm a different product or quantity.
         resolve_confirmation(pending["id"], "rejected")
         return {
             "error": "confirmation_mismatch",
@@ -379,10 +362,7 @@ def _check_order_status(tool_input: dict) -> dict:
     if not order:
         return {"error": "not_found"}
 
-    # Fallback reconciliation: if no webhook has updated this order yet, ask
-    # Razorpay directly. Covers local dev/demos with no public URL for
-    # Razorpay to deliver a webhook to — the webhook is still the primary
-    # mechanism and this is skipped once an order is already resolved.
+    # Polling is a local-development fallback when no webhook has arrived.
     if order["status"] == "pending" and order["razorpay_payment_link_id"]:
         remote_status = fetch_payment_link_status(order["razorpay_payment_link_id"])
         changed = False
@@ -410,7 +390,7 @@ def _check_order_status(tool_input: dict) -> dict:
                 sku_id=order["sku_id"],
                 reason=reason,
             )
-            order = get_order(order["order_id"])  # re-read the now-updated row
+            order = get_order(order["order_id"])
 
     return {
         "order_id": order["order_id"],
@@ -427,8 +407,7 @@ def _offer_upsell(tool_input: dict, *, session_id: str | None) -> dict:
     if not order:
         return {"error": "not_found", "order_id": order_id}
 
-    # Backend-enforced gate — even if the model tries this before payment is
-    # confirmed, it's refused here, not just discouraged in the prompt.
+    # Upsells are eligible only after payment is confirmed.
     if order["status"] != "paid":
         return {
             "error": "payment_not_confirmed",
@@ -437,8 +416,7 @@ def _offer_upsell(tool_input: dict, *, session_id: str | None) -> dict:
             "message": "This order's payment hasn't been confirmed yet, so no upsell can be offered.",
         }
 
-    # Idempotent: re-calling this for the same order returns the same
-    # already-offered product rather than re-rolling a new one.
+    # Reuse an existing offer instead of selecting another product.
     existing = get_offered_upsell(order_id)
     if existing:
         product = find_product(existing["sku_id"])
@@ -464,8 +442,7 @@ def _confirm_upsell(tool_input: dict, *, session_id: str | None, source: str) ->
         resolve_pending_upsell(pending["id"], "declined")
         return {"order_id": order_id, "status": "declined", "sku_id": pending["sku_id"]}
 
-    # The SKU comes ONLY from the stored offer, never from tool_input — the
-    # model has no way to substitute a different product at this step.
+    # Use only the stored offer; the caller cannot substitute another SKU.
     result = create_order_and_link(
         sku_id=pending["sku_id"],
         quantity=1,
@@ -474,10 +451,7 @@ def _confirm_upsell(tool_input: dict, *, session_id: str | None, source: str) ->
         kind="upsell",
         parent_order_id=order_id,
     )
-    # Only mark the offer "accepted" if a link was actually created — same
-    # principle as the purchase-confirmation gate: a failed Razorpay attempt
-    # (e.g. a transient outage) must not burn the offer. Left as "offered" on
-    # failure so accepting again can retry without re-rolling a new upsell.
+        # Keep the offer available when payment-link creation fails.
     if "payment_link" in result:
         resolve_pending_upsell(pending["id"], "accepted")
     result["upsell_sku_id"] = pending["sku_id"]
@@ -496,8 +470,7 @@ _HANDLERS = {
     "confirm_upsell": lambda inp, **ctx: _confirm_upsell(inp, session_id=ctx["session_id"], source=ctx["source"]),
 }
 
-# Tools that create a Razorpay payment link — subject to the auto-approval
-# cap and logged with amount/bound info in the audit trail.
+# Payment-link tools are subject to the cap and audit logging.
 _MONEY_TOOLS = {"create_payment_link", "confirm_upsell"}
 
 _OUTCOME_BY_TOOL = {
@@ -555,7 +528,7 @@ def run_tool(name: str, tool_input: dict, *, session_id: str | None = None, sour
 
     order_id = result.get("order_id") or result.get("source_order_id") or tool_input.get("order_id")
     if order_id is None and result.get("confirmation_id") is not None:
-        order_id = f"conf_{result['confirmation_id']}"  # correlation id, reusing the generic column
+        order_id = f"conf_{result['confirmation_id']}"
     sku_id = tool_input.get("sku_id") or result.get("sku_id") or result.get("upsell_sku_id")
     reason = result.get("message")
 

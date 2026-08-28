@@ -15,6 +15,9 @@ Rules:
   as bare URLs with nothing around them.
 - Always search the catalog before recommending a product; never invent products or prices.
 - When multiple variants match (e.g. different colors), show the buyer the options.
+- Never show internal SKU/inventory IDs (such as sku-001) in customer-facing replies. Use
+  product names, colors, sizes, prices, and other shopper-friendly details instead. SKU IDs
+  remain internal for tool calls and audit records.
 - Confirmation is backend-enforced, not just a conversation courtesy — create_payment_link
   will REFUSE to run unless the backend has a matching, still-valid confirmation on file.
   The only way to get one is:
@@ -93,7 +96,8 @@ def run_agent_turn(history: list[dict], session_id: str | None = None) -> dict:
     messages = list(history)
     actions = []
 
-    for _ in range(6):  # hard cap on tool-call round-trips per turn
+    # Bound tool execution so one request cannot loop indefinitely.
+    for _ in range(6):
         response = client.messages.create(
             model=MODEL,
             max_tokens=1024,
@@ -107,8 +111,7 @@ def run_agent_turn(history: list[dict], session_id: str | None = None) -> dict:
             messages.append({"role": "assistant", "content": response.content})
             return {"reply": reply_text, "messages": messages, "actions": actions}
 
-        # Reasoning = any text the model wrote alongside this batch of tool calls,
-        # used as the "why" in the audit log.
+        # Preserve model text as context for the audit record.
         reasoning = " ".join(b.text for b in response.content if b.type == "text").strip()
 
         messages.append({"role": "assistant", "content": response.content})

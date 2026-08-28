@@ -2,9 +2,11 @@ import hashlib
 import hmac
 import json
 import time
+from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from app.catalog import load_catalog, find_product, validate_quantity
@@ -17,6 +19,12 @@ from app.quotes import create_quote, get_quote, consume_quote
 
 app = FastAPI(title="AgentCheckout API")
 
+app.mount(
+    "/product-images",
+    StaticFiles(directory=str(Path(__file__).resolve().parent.parent / "data" / "product-images")),
+    name="product-images",
+)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:3000"],
@@ -26,8 +34,7 @@ app.add_middleware(
 
 
 def _quantity_http_error(qty_error: str, available: int) -> HTTPException:
-    # 400 for a malformed request (zero/negative quantity), 422 for a
-    # well-formed request the store just can't fulfill (not enough stock).
+    # Invalid input is 400; valid but unfulfillable requests are 422.
     if qty_error == "invalid_quantity":
         return HTTPException(status_code=400, detail={"error": qty_error})
     return HTTPException(status_code=422, detail={"error": qty_error, "available": available})
@@ -52,7 +59,7 @@ def get_product(sku_id: str):
 
 
 class ChatRequest(BaseModel):
-    history: list[dict]  # full prior conversation, e.g. [{"role": "user", "content": "..."}]
+    history: list[dict]
     session_id: str | None = None
 
 
@@ -70,9 +77,7 @@ def audit_log(limit: int = 100):
     return list_actions(limit=limit)
 
 
-# --- Razorpay webhook: confirms whether a payment link was actually paid.
-# Creating a payment link is NOT the same as being paid — this is the only
-# thing that marks an order 'paid', which is what gates the upsell offer.
+# Razorpay is the source of truth for payment completion and upsell eligibility.
 @app.post("/api/webhooks/razorpay")
 async def razorpay_webhook(request: Request):
     body = await request.body()
@@ -83,7 +88,7 @@ async def razorpay_webhook(request: Request):
 
     expected = hmac.new(RAZORPAY_WEBHOOK_SECRET.encode(), body, hashlib.sha256).hexdigest()
     if not hmac.compare_digest(expected, signature):
-        # Never trust an invalid webhook: reject before touching any order data.
+        # Reject before reading or changing any order state.
         log_action(
             session_id=None,
             source="razorpay-webhook",
@@ -147,25 +152,10 @@ async def razorpay_webhook(request: Request):
             sku_id=order["sku_id"],
             reason=f"Razorpay reported {event}" if changed else "Order already resolved — duplicate/late event ignored",
         )
-    # Other event types (e.g. payment_link.partially_paid) are accepted but
-    # not acted on — still return 200 so Razorpay doesn't keep retrying.
-
     return {"status": "ok"}
 
 
-# --- Day 5: agent-readable endpoints, meant to be consumed by ANOTHER AI agent
-# (not a human, not our own chat agent) acting on a buyer's behalf. No LLM call
-# happens on this side for these — they're plain structured endpoints, which is
-# the point: a buyer-agent shouldn't need to understand our chat prompt, just
-# this contract. See backend/buyer_agent.py for a working buyer-side agent that
-# consumes exactly this API.
-#
-# Section 2 gate: /api/agent/quote issues a short-lived, server-signed quote_id
-# snapshotting sku/quantity/amount/cap-status. /api/agent/order requires that
-# exact quote_id and rejects anything missing, expired, already-consumed, or
-# that doesn't match the quoted sku/quantity — a buyer agent can propose
-# whatever it wants to /api/agent/quote, but cannot talk its way past the
-# server-computed numbers when it actually tries to pay.
+# Machine-readable commerce endpoints for independent buyer agents.
 
 
 @app.get("/api/agent/catalog")
@@ -263,7 +253,7 @@ def agent_order(req: AgentOrderRequest):
             bound_limit_inr=AGENT_MAX_AUTO_AMOUNT_INR,
             within_bound=within_bound,
             outcome=outcome,
-            order_id=quote_id,  # correlation id; a quote_id is as good a handle as an order_id here
+            order_id=quote_id,
             sku_id=req.sku_id,
             reason=reason,
         )

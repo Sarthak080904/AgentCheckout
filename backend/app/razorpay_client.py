@@ -33,7 +33,7 @@ def _create_payment_link_once(
     try:
         link = client.payment_link.create(
             {
-                "amount": amount_inr * 100,  # paise
+            "amount": amount_inr * 100,
                 "currency": "INR",
                 "description": description,
                 "customer": {"name": customer_name},
@@ -43,9 +43,7 @@ def _create_payment_link_once(
             }
         )
     except Exception as e:
-        # Covers real Razorpay SDK errors (bad request, server error) and
-        # network-layer failures alike — the caller shouldn't need to know
-        # which, only that the attempt failed.
+        # Normalize SDK and network failures for the retrying caller.
         raise PaymentLinkError(str(e)) from e
 
     return {

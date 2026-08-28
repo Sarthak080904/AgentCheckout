@@ -15,8 +15,7 @@ import json
 import os
 import sys
 
-# Windows' default console codepage (cp1252) can't print the rupee sign our
-# tool results contain; force UTF-8 stdout so this doesn't crash mid-demo.
+# Keep Windows console output UTF-8 for currency symbols.
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
 

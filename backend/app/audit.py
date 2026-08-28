@@ -7,7 +7,7 @@ from app.db import connect
 def log_action(
     *,
     session_id: str | None,
-    source: str = "human-chat",  # 'human-chat' | 'agent-to-agent'
+    source: str = "human-chat",
     tool: str,
     tool_input: dict,
     result: dict,
