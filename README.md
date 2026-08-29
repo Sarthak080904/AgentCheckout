@@ -187,4 +187,3 @@ frontend/app/                Next.js UI and live audit panel
 - Razorpay live webhook delivery requires ngrok or another public HTTPS URL during local development.
 - The project demonstrates payment-link creation and payment confirmation; fulfillment, shipping, refunds, and production inventory reservation are outside the demo scope.
 - SQLite is suitable for this single-process demo, but a production multi-service deployment should use a managed database.
-"# AgentCheckout" 
